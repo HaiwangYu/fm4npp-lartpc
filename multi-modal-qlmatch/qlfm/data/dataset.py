@@ -35,13 +35,21 @@ class Shard:
 
 
 class Corpus:
-    """All shards of one sample; global event index = (shard, local index)."""
+    """Shards of one or more samples; global event index = (shard, local index).
+
+    `root` may be a comma-separated list of sample directories (e.g. ".../bnb,.../nue");
+    samples are concatenated in that order and `sample_id` records the origin of each event."""
 
     def __init__(self, root, pattern="*"):
-        dirs = sorted(d for d in glob.glob(os.path.join(root, pattern)) if os.path.exists(os.path.join(d, "meta.json")))
-        if not dirs:
-            raise FileNotFoundError(f"no converted shards under {root}/{pattern}")
-        self.shards = [Shard(d) for d in dirs]
+        self.roots = root.split(",")
+        self.shards, sid = [], []
+        for k, r in enumerate(self.roots):
+            dirs = sorted(d for d in glob.glob(os.path.join(r, pattern)) if os.path.exists(os.path.join(d, "meta.json")))
+            if not dirs:
+                raise FileNotFoundError(f"no converted shards under {r}/{pattern}")
+            self.shards += [Shard(d) for d in dirs]
+            sid += [k] * len(dirs)
+        self.shard_sample = np.array(sid)
         self.sizes = np.array([s.n for s in self.shards])
         self.starts = np.concatenate([[0], np.cumsum(self.sizes)[:-1]])
         self.n = int(self.sizes.sum())
@@ -52,6 +60,9 @@ class Corpus:
 
     def ev_array(self, k):
         return np.concatenate([np.asarray(s.ev(k)) for s in self.shards])
+
+    def sample_id(self):
+        return np.repeat(self.shard_sample, self.sizes)
 
 
 class EventDataset(torch.utils.data.Dataset):

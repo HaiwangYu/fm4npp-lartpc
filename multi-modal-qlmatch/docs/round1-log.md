@@ -46,3 +46,22 @@
 | T4, CL | energy resolution | 37% |
 
 - The large gap between C and CL on T2 is physical. Charge alone has to find a small neutrino among about 26 cosmic muons, whereas the in-time flash flags a neutrino event directly.
+
+### Review decisions (issue #1) and the changes they triggered
+- **(a) νe sample merged into every split.** The corpus is now `cache/bnb,cache/nue`: 830,807 events, including 77,340 from the νe sample. Splits are `cache/splits_all.npz`, hashed on (run, subrun) as before.
+  - νe-sample share by split: train 9.4%, val 9.2%, test 7.2%.
+  - The pretraining scaling subsets and label pools draw from the merged train split, so they contain about 9% νe-sample events.
+  - T3 train is now νμCC 200k / νeCC 68k / NC 49k.
+- **(b) T2 is now 3-class.**
+
+  | Class | Definition | Train events |
+  |---|---|---|
+  | 0 | no ν charge (≤ 5 ν hits) | 142k |
+  | 1 | visible in-AV ν (≥ 30 collection-plane ν hits) | 333k |
+  | 2 | out-of-AV ν that leaves > 5 hits | 241k |
+
+  - The headline score is unchanged: the AUC of in-AV ν against no-ν events, from p(class 1).
+  - Also reported: the in-AV vs out-of-AV AUC, 3-class macro-F1 and the confusion matrix.
+  - In-AV events with low visibility (6–29 collection-plane hits; 34k) stay excluded.
+- **(c, d)** Fixed pretraining steps across data fractions, and the current label thresholds, are both confirmed.
+- **Superseded results.** Results computed on the bnb-only corpus moved to `fm4npp-lartpc-work/archive_bnbonly/`. Pretraining had not started yet and was resubmitted on the merged corpus.

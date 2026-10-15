@@ -1,7 +1,9 @@
 """Downstream task definitions (single source of truth). Thresholds fixed after the data audit.
 
 T1 hit     : per-hit neutrino vs cosmic/noise, on events with a visible in-AV neutrino.
-T2 evt_nu  : event has a visible in-AV neutrino interaction (1) vs essentially no neutrino charge (0).
+T2 evt_nu  : 3 classes: 0 = essentially no neutrino charge (cosmic-only-like), 1 = visible in-AV neutrino
+             interaction, 2 = neutrino interacting outside the AV that still leaves charge in the TPC.
+             In-AV events with low visibility (between the thresholds) are excluded.
 T3 flavor  : FV + visible: 0 = numu CC, 1 = nue CC, 2 = NC.
 T4 energy  : FV + visible + CC: regress log(E_nu / GeV).
 """
@@ -14,7 +16,7 @@ VIS_POS_Y_HITS = 30       # T2 positive: >= this many collection-plane neutrino 
 VIS_NEG_HITS = 5          # T2 negative: <= this many neutrino hits (all planes)
 
 TASKS = ("hit", "evt_nu", "flavor", "energy")
-N_OUT = {"hit": 1, "evt_nu": 1, "flavor": 3, "energy": 1}
+N_OUT = {"hit": 1, "evt_nu": 3, "flavor": 3, "energy": 1}
 
 
 def event_labels(ev):
@@ -26,12 +28,13 @@ def event_labels(ev):
     ntot = ev["nu_nhits"].sum(1)
     visible = in_av & (ny >= VIS_POS_Y_HITS)
     nonu = ntot <= VIS_NEG_HITS
+    out_av = ~in_av & ~nonu
     apdg = np.abs(ev["nu_pdg"])
     cc = ev["is_cc"] == 1
     flavor = np.where(~cc, 2, np.where(apdg == 12, 1, 0))
     return {
         "hit": (visible, None),
-        "evt_nu": (visible | nonu, visible.astype(np.float32)),
+        "evt_nu": (visible | nonu | out_av, np.where(visible, 1, np.where(out_av, 2, 0)).astype(np.int64)),
         "flavor": (in_fv & visible, flavor.astype(np.int64)),
         "energy": (in_fv & visible & cc, np.log(np.clip(ev["nu_energy"], 1e-3, None)).astype(np.float32)),
     }

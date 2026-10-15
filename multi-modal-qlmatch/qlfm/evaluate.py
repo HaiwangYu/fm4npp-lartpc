@@ -27,11 +27,29 @@ def hit_metrics(r, thr=0.5):
     return out
 
 
+def _softmax(logits):
+    p = np.exp(logits - logits.max(1, keepdims=True))
+    return p / p.sum(1, keepdims=True)
+
+
 def evt_nu_metrics(r):
-    y, s = r["y"].astype(int), r["pred"].reshape(-1)
-    auc = roc_auc_score(y, s)
-    return dict(score=float(auc), auc=float(auc), eff_at_rej95=_eff_at_rej(y, s, 0.95),
-                eff_at_rej99=_eff_at_rej(y, s, 0.99), n_pos=int(y.sum()), n_neg=int((1 - y).sum()))
+    """3-class: 0 no-nu charge, 1 visible in-AV nu, 2 out-of-AV nu with charge.
+    Headline (score) = AUC of in-AV nu vs no-nu events, using p(in-AV nu)."""
+    y, logits = r["y"].astype(int), r["pred"]
+    p = _softmax(logits)
+    m01 = y != 2
+    y01, s = (y[m01] == 1).astype(int), p[m01, 1]
+    auc = roc_auc_score(y01, s)
+    m12 = y != 0
+    auc_av = roc_auc_score(y[m12] == 1, p[m12, 1]) if (y == 2).any() else float("nan")
+    pred = logits.argmax(1)
+    cm = np.zeros((3, 3), int)
+    np.add.at(cm, (y, pred), 1)
+    mf1 = f1_score(y, pred, average="macro", labels=[0, 1, 2], zero_division=0)
+    return dict(score=float(auc), auc=float(auc), eff_at_rej95=_eff_at_rej(y01, s, 0.95),
+                eff_at_rej99=_eff_at_rej(y01, s, 0.99), auc_inav_vs_outav=float(auc_av),
+                macro_f1=float(mf1), eff=(cm.diagonal() / np.maximum(cm.sum(1), 1)).tolist(),
+                confusion=cm.tolist(), n_class=np.bincount(y, minlength=3).tolist())
 
 
 def flavor_metrics(r):
@@ -43,8 +61,7 @@ def flavor_metrics(r):
     pur = cm.diagonal() / np.maximum(cm.sum(0), 1)
     mf1 = f1_score(y, pred, average="macro", labels=[0, 1, 2], zero_division=0)
     # nue-CC efficiency at 50% purity-free operating point: AUC of nue score
-    pe = np.exp(logits - logits.max(1, keepdims=True))
-    pe = pe / pe.sum(1, keepdims=True)
+    pe = _softmax(logits)
     auc_e = roc_auc_score(y == 1, pe[:, 1]) if (y == 1).any() and (y != 1).any() else float("nan")
     return dict(score=float(mf1), macro_f1=float(mf1), acc=float((pred == y).mean()),
                 eff=eff.tolist(), pur=pur.tolist(), auc_nue=float(auc_e), confusion=cm.tolist())

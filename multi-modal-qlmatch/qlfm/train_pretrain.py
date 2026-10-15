@@ -20,8 +20,8 @@ from qlfm.tokenize import TokCfg
 
 def get_args(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--corpus", default=os.path.expandvars("$QLFM_WORK/cache/bnb"))
-    ap.add_argument("--splits", default=os.path.expandvars("$QLFM_WORK/cache/splits_bnb.npz"))
+    ap.add_argument("--corpus", default=os.path.expandvars("$QLFM_WORK/cache/bnb,$QLFM_WORK/cache/nue"))
+    ap.add_argument("--splits", default=os.path.expandvars("$QLFM_WORK/cache/splits_all.npz"))
     ap.add_argument("--subset", default="train", help="key in the splits file (e.g. train, pre_f0.10)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--light", type=int, default=1)

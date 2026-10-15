@@ -23,8 +23,8 @@ from qlfm.tokenize import TokCfg
 
 def get_args(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--corpus", default=os.path.expandvars("$QLFM_WORK/cache/bnb"))
-    ap.add_argument("--splits", default=os.path.expandvars("$QLFM_WORK/cache/splits_bnb.npz"))
+    ap.add_argument("--corpus", default=os.path.expandvars("$QLFM_WORK/cache/bnb,$QLFM_WORK/cache/nue"))
+    ap.add_argument("--splits", default=os.path.expandvars("$QLFM_WORK/cache/splits_all.npz"))
     ap.add_argument("--task", required=True, choices=list(N_OUT))
     ap.add_argument("--mode", required=True, choices=["scratch", "frozen", "finetune", "linear"])
     ap.add_argument("--fm", default=None, help="pretrained fm.pt (frozen/finetune/linear)")
@@ -85,9 +85,7 @@ def loss_fn(task, out, b, y, class_w):
         tgt = (b["hit_nu_edep"] > HIT_NU_EDEP_MEV).float()
         w = b["hit_q"].clamp(min=1.0).log1p()            # mild charge weighting
         return (F.binary_cross_entropy_with_logits(out, tgt, reduction="none") * w).sum() / w.sum()
-    if task == "evt_nu":
-        return F.binary_cross_entropy_with_logits(out.squeeze(1), y.float())
-    if task == "flavor":
+    if task in ("evt_nu", "flavor"):
         return F.cross_entropy(out, y, weight=class_w)
     return F.huber_loss(out.squeeze(1), y.float(), delta=0.5)
 
@@ -186,7 +184,7 @@ def main(argv=None):
             g["lr_scale"] = 1.0
     steps = int(np.clip(args.epochs * len(tr) / args.bs, args.min_steps, args.max_steps))
     class_w = None
-    if args.task == "flavor":
+    if args.task in ("evt_nu", "flavor"):
         cnt = np.bincount(target[tr], minlength=3).astype(np.float64)
         class_w = torch.tensor((cnt.sum() / np.maximum(cnt, 1) / 3) ** 0.5, dtype=torch.float32, device=dev)
 
