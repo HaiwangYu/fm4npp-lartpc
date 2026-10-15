@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:eagle
+#PBS -N qlfm_smoke
+#PBS -j oe
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+cd $QLFM_ROOT
+T=$QLFM_WORK/test; O=$T/smoke_$(date +%s); mkdir -p $O
+nvidia-smi -L
+COMMON="--corpus $T --splits $T/splits_test.npz"
+# 1) pretraining, 4 GPUs DDP
+mpiexec -n 4 --ppn 4 --cpu-bind depth -d 8 $PY -m qlfm.train_pretrain $COMMON --out $O/pre --steps 300 --bs 16 \
+   --val-every 150 --log-every 25 --workers 6 --n-val 64 2>&1 | tail -25
+# 2) downstream, one per GPU in parallel
+DS="$COMMON --label-frac 1 --min-steps 60 --max-steps 60 --eval-every 30 --n-val 64 --n-test 64 --workers 4 --bs 16"
+CUDA_VISIBLE_DEVICES=0 $PY -m qlfm.train_downstream $DS --task hit --mode frozen --fm $O/pre/fm.pt --out $O/hit_frozen > $O/hit_frozen.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 $PY -m qlfm.train_downstream $DS --task energy --mode finetune --fm $O/pre/fm.pt --out $O/en_ft > $O/en_ft.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 $PY -m qlfm.train_downstream $DS --task flavor --mode scratch --light 0 --out $O/fl_scratch > $O/fl_scratch.log 2>&1 &
+CUDA_VISIBLE_DEVICES=3 $PY -m qlfm.train_downstream $DS --task energy --mode linear --fm $O/pre/fm.pt --out $O/en_lin > $O/en_lin.log 2>&1 &
+wait
+for f in $O/*.log; do echo "== $f"; tail -4 $f; done

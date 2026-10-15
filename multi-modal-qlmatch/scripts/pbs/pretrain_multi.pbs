@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -l filesystems=home:eagle
+#PBS -j oe
+# Several 2-node pretraining runs in one allocation.
+# qsub -q debug-scaling -l select=10:system=polaris -l walltime=01:00:00 -v RUNS_FILE=/path/runs.txt pretrain_multi.pbs
+# RUNS_FILE lines: OUTDIR ARGS...
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+cd $QLFM_ROOT
+NPG=${NODES_PER_RUN:-2}
+WALL=$(qstat -f $PBS_JOBID | awk -F'= ' '/Resource_List.walltime/{split($2,a,":"); print a[1]*60+a[2]}')
+TL=$(( WALL - 7 ))
+mapfile -t NODES < <(sort -u $PBS_NODEFILE)
+i=0
+while read -r OUT ARGS; do
+  [ -z "$OUT" ] && continue
+  g=( "${NODES[@]:$((i*NPG)):$NPG}" )
+  [ ${#g[@]} -lt $NPG ] && { echo "not enough nodes for $OUT"; break; }
+  hf=$PBS_O_WORKDIR/hosts_${PBS_JOBID%%.*}_$i; printf "%s\n" "${g[@]}" > $hf
+  mkdir -p $OUT
+  ( export MASTER_ADDR=${g[0]} MASTER_PORT=$((29600+i))
+    mpiexec -n $((NPG*4)) --ppn 4 --hostfile $hf --cpu-bind depth -d 8 \
+      $PY -u -m qlfm.train_pretrain --out $OUT --time-limit $TL $ARGS 2>&1 | grep -v -E "Warn|bind: warning" > $OUT/stdout_${PBS_JOBID%%.*}.log ) &
+  echo "run $i on ${g[*]} -> $OUT"
+  i=$((i+1))
+done < $RUNS_FILE
+wait

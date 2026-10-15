@@ -1,0 +1,48 @@
+# Round-1 working log (decisions, findings, deviations from the plan)
+
+## 2026-10-15
+
+### Data and infrastructure
+- **Downloads.** Inclusive NoWire (18 files, 194.9 GB) and νe NoWire (18 of 20 files) are md5-verified. Data files are read-only.
+  - Zenodo throttles each connection, so the downloads used parallel HTTP byte ranges.
+  - A stale downloader left on `polaris-login-02` after a disconnect corrupted some partial ranges by appending to them alongside the new downloader. Those ranges were discarded and re-fetched. The final md5 checks pass.
+- **Conversion** (`qlfm.data.convert`). The 753,467 inclusive events go into 108 parts, 146 GB of column-wise `.npy` files. This takes about 3 min on one compute node; on the login node it is roughly 20× slower.
+- **DDP hang.** Under `mpiexec` the long `TMPDIR` path broke DataLoader worker sockets (`AF_UNIX path too long`). Fixed by setting `TMPDIR=/tmp` in `scripts/env.sh`.
+- **Queue limits.** `debug` allows 1 running and 1 queued job per user (up to 2 nodes). `debug-scaling` allows 1 queued job (up to 10 nodes).
+  - Several 2-node pretraining runs are therefore packed into one multi-node job (`scripts/pbs/pretrain_multi.pbs`).
+  - Many single-GPU downstream runs share nodes through `scripts/run_queue.sh`.
+
+### Audit (inclusive sample; `fm4npp-lartpc-work/audit_bnb/audit.json`)
+- **Occupancy.**
+  - Hits per event: median 15.4k (1st–99th percentile 6.6k–28.5k).
+  - Charge tokens per event (16 wires × 64 ticks cells): median 2.0k, 99th percentile 3.4k. Only 0.2% of events exceed 4096.
+- **Neutrino location.** 44% of events have the ν vertex in the active volume (AV) and 42% in the fiducial volume (FV). In 21% of events the neutrino leaves ≤ 5 hits.
+- **Timing.** Beam-flash time minus ν time = 0.478 µs, with a 5–95% range of 0.457–0.507 µs. Some ophits fall at t < 0 or t ≫ 23.4 µs; these are dropped.
+- **Task pools.**
+  - T2: 294k positive, 158k negative, 302k ambiguous (excluded).
+  - T3: 222.7k νμCC, 1,484 νeCC (0.5%), 54.8k NC.
+  - T4: 224k events.
+- **Baselines.**
+  - T2 AUC: Pandora max `nu_score` 0.818; beam-flash PE in 3–6 µs 0.911.
+  - T1 (charge-weighted): Pandora ν-slice hits give efficiency 0.77, purity 0.53, F1 0.63.
+
+### MAE charge-target problem (important finding)
+- **Symptom.** The first design gave tokens their cell-centre position and used a 4×8 in-cell charge sub-grid plus (log n_hits, log Σq) as the reconstruction target. The masked-charge loss never beat a per-dimension mean predictor, while the light reconstruction learned well.
+- **Diagnosis.**
+  1. Single-batch overfitting and a "target-leak" plumbing test showed the wiring was correct.
+  2. Fourier, learned-grid and combined position embeddings made no difference.
+  3. A non-neural baseline was the key result. Predicting a masked cell's statistics from the average of its visible neighbours is *worse* than the global mean, at 8×32, 16×64 and 32×128 cell sizes. Tracks cross a fixed grid at arbitrary offsets: a cell whose corner a track clips gets 1–2 hits, while one it crosses through the middle gets about 16. Given only the grid position, the content of a masked cell is essentially unpredictable.
+- **Fix.** Use the Point-MAE / PoLAr-MAE convention: the token position is the patch centre on the track, here the charge-weighted centroid. Encode it with Fourier features (10 octaves) plus an explicit embedding of the centroid's offset inside its cell. Standardize every target dimension within the batch.
+- **Result.** On held-out events the masked-charge error falls to 0.61 of the mean baseline (sub-grid 0.61, count/charge 0.52); before the fix it was 0.97–0.99.
+- **Defaults now.** `--pos-mode centroid --pos-freq 10 --target-norm 1`.
+
+### E1 scratch sanity (1% labels; ~2–4k labeled events)
+
+| Task | Metric | Result |
+|---|---|---|
+| T2, charge + light (CL) | AUC | 0.958 |
+| T2, charge only (C) | AUC | 0.605 |
+| T1, CL | charge-weighted F1 | 0.81 (Pandora 0.63) |
+| T4, CL | energy resolution | 37% |
+
+- The large gap between C and CL on T2 is physical. Charge alone has to find a small neutrino among about 26 cosmic muons, whereas the in-time flash flags a neutrino event directly.
