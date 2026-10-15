@@ -15,6 +15,8 @@ worker() {
       [ -f $out/metrics.json ] && continue
       local left=$(( (DEADLINE - $(/bin/date +%s)) / 60 - 3 ))
       [ $left -lt 10 ] && return
+      # long runs (large label budgets, encoder trained) need a fresh slot
+      if [[ "$line" =~ --label-frac\ (1|0\.1)\  ]] && [[ ! "$line" =~ --mode\ (frozen|linear) ]] && [ $left -lt 40 ]; then continue; fi
       mkdir -p $(dirname $out)
       mkdir $out.lock 2>/dev/null || continue
       mkdir -p $out

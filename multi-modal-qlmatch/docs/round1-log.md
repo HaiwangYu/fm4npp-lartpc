@@ -65,3 +65,23 @@
   - In-AV events with low visibility (6–29 collection-plane hits; 34k) stay excluded.
 - **(c, d)** Fixed pretraining steps across data fractions, and the current label thresholds, are both confirmed.
 - **Superseded results.** Results computed on the bnb-only corpus moved to `fm4npp-lartpc-work/archive_bnbonly/`. Pretraining had not started yet and was resubmitted on the merged corpus.
+
+### Main pretraining (1 node per run; 17k steps at global batch 256, about 4.4M events)
+- FM-C@90%: validation masked-charge loss 0.366, in units of the mean-predictor baseline (1.0).
+- FM-CL@90%:
+  - masked charge 0.440
+  - masked light 0.446
+  - light predicted from charge alone ("charge→light") 0.556, against a mean baseline of about 1.13
+- Both runs took about 45 min on one node.
+
+### Downstream protocol fixes (v1 results archived to `archive_v1_e3_biasedval/`)
+- **Biased val/test subsets.** v1 took the first N eligible events in index order. The νe sample sits at the end of the merged index, so the val subsets (3k events) contained almost no νe-sample events: the flavor val set had 16 νeCC. The event-level and hit test subsets were likewise dominated by inclusive events. Subsets are now drawn at random with fixed seeds.
+- **Undertrained scratch and fine-tune runs.** The 6000-step cap left large-budget scratch runs undertrained; charge-only event-level heads had barely started learning. The cap is raised to 15k steps. The queue starts these long runs only in a slot with at least 40 min left, and they sit at the top of the task list.
+- **Early v1 signal** at 0.1% labels, before the fixes:
+
+  | Task | CL fine-tune | CL frozen | CL scratch |
+  |---|---|---|---|
+  | T2 AUC | 0.974 | 0.951 | 0.939 |
+  | flavor macro-F1 | 0.512 | 0.417 | 0.340 |
+  | T4 resolution | 0.417 | 0.470 | 0.465 |
+  | T1 F1 | 0.754 | 0.489 | 0.19 |

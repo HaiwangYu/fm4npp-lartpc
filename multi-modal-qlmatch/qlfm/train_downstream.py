@@ -36,7 +36,7 @@ def get_args(argv=None):
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--epochs", type=float, default=30)
     ap.add_argument("--min-steps", type=int, default=400)
-    ap.add_argument("--max-steps", type=int, default=6000)
+    ap.add_argument("--max-steps", type=int, default=15000)
     ap.add_argument("--eval-every", type=int, default=300)
     ap.add_argument("--n-val", type=int, default=3000)
     ap.add_argument("--n-test", type=int, default=20000)
@@ -154,8 +154,10 @@ def main(argv=None):
 
     pool = sp[f"lab_f{args.label_frac:g}"]
     tr = pool[elig[pool]]
-    va = sp["val"][elig[sp["val"]]][: args.n_val]
-    te = sp["test"][elig[sp["test"]]][: args.n_test]
+    # fixed random (not index-ordered) val/test subsets: samples are concatenated in index order
+    pick = lambda idx, n, seed: np.sort(np.random.default_rng(seed).permutation(idx)[:n])
+    va = pick(sp["val"][elig[sp["val"]]], args.n_val, 11)
+    te = pick(sp["test"][elig[sp["test"]]], args.n_test, 12)
 
     # ---- model ----
     if args.mode == "scratch":
