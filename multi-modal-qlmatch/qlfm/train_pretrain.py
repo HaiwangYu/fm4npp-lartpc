@@ -201,6 +201,8 @@ def main(argv=None):
     save()
     if dist.is_main():
         print(f"stopped at step {step}", flush=True)
+        if step >= args.steps:
+            open(os.path.join(args.out, "done"), "w").write(f"{step}\n")
     dist.barrier()
 
 
