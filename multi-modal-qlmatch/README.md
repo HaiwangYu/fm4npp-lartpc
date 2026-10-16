@@ -34,8 +34,8 @@ qsub -q debug -l select=2:system=polaris -l walltime=01:00:00 -v TASKS=$PWD/task
 $PY scripts/summarize.py $QLFM_WORK/e3
 ```
 ## Polaris notes
-- `debug`: 1 running + 1 queued job per user (≤2 nodes); `debug-scaling`: 1 queued job (≤10 nodes).
-  Pack work: `scripts/pbs/pretrain_multi.pbs` (several 2-node pretraining runs per job) and
+- `debug`: 1 running + 1 queued job per user (≤2 nodes); `debug-scaling`: 1 job total, running or queued (≤10 nodes).
+  Pack work: `scripts/pbs/pretrain_multi.pbs` (several pretraining runs per job, `NODES_PER_RUN`) and
   `scripts/pbs/queue.pbs` + `scripts/run_queue.sh` (single-GPU downstream runs, 4 per node).
 - No ssh to compute nodes: `scripts/pbs/hold.pbs` runs `scripts/node_agent.sh`; send commands with
   `scripts/box_run.sh NAME TIMEOUT <<'EOF' ... EOF`.
