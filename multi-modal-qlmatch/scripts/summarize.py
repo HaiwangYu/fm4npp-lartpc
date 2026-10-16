@@ -52,22 +52,27 @@ def plot(df, out):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     tasks = [t for t in KEY if t in set(df.task)]
-    fig, axs = plt.subplots(1, len(tasks), figsize=(4.2 * len(tasks), 3.6), squeeze=False)
-    sty = {"scratch": "-", "frozen": "--", "finetune": ":", "linear": "-."}
+    fig, axs = plt.subplots(1, len(tasks), figsize=(4.6 * len(tasks), 4.4), squeeze=False)
+    sty = {"scratch": ("-", "o"), "frozen": ("--", "s"), "finetune": (":", "^"), "linear": ("-.", "D")}
     col = {"C": "#1f77b4", "CL": "#d62728"}
     for ax, t in zip(axs[0], tasks):
         k, name = KEY[t]
         d = df[(df.task == t) & df.pre_frac.isna()]
         for (mode, inp), g in d.groupby(["mode", "input"]):
             s = g.groupby("n_train")[k].agg(["mean", "std"]).reset_index()
-            ax.errorbar(s.n_train, s["mean"], yerr=s["std"].fillna(0), ls=sty.get(mode, "-"), color=col.get(inp, "k"),
-                        marker="o", ms=3, capsize=2, label=f"{mode} {inp}")
+            ls, mk = sty.get(mode, ("-", "o"))
+            ax.errorbar(s.n_train, s["mean"], yerr=s["std"].fillna(0), ls=ls, marker=mk, ms=7, lw=1.8,
+                        color=col.get(inp, "k"), mfc="white" if mode == "frozen" else col.get(inp, "k"),
+                        mew=1.6, capsize=3, label=f"{mode} {inp}")
         ax.set_xscale("log")
-        ax.set_xlabel("labeled training events")
-        ax.set_title(f"{t}: {name}", fontsize=9)
+        ax.set_xlabel("labeled training events", fontsize=11)
+        ax.set_title(f"{t}: {name}", fontsize=11)
         ax.grid(alpha=0.3)
-    axs[0][0].legend(fontsize=7)
-    fig.tight_layout()
+    h, l = axs[0][0].get_legend_handles_labels()
+    order = sorted(range(len(l)), key=lambda i: (l[i].split()[1], ["scratch", "frozen", "finetune", "linear"].index(l[i].split()[0])))
+    fig.legend([h[i] for i in order], [l[i] for i in order], loc="lower center", ncol=len(l), fontsize=11,
+               handlelength=3.5, frameon=False)
+    fig.tight_layout(rect=(0, 0.1, 1, 1))
     fig.savefig(out, dpi=130)
 
 

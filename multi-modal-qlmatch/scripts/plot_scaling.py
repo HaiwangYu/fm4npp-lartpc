@@ -47,7 +47,7 @@ def collect(W):
 def main():
     W, out = sys.argv[1], sys.argv[2]
     pts, vl = collect(W)
-    fig, axs = plt.subplots(1, 5, figsize=(21, 3.8))
+    fig, axs = plt.subplots(1, 5, figsize=(22, 4.6))
     col = {("S", "cl"): "#d62728", ("S", "c"): "#1f77b4", ("M", "cl"): "#9467bd"}
     lab = {("S", "cl"): "CL (6.6M)", ("S", "c"): "C (6.6M)", ("M", "cl"): "CL (21M, 2x steps)"}
     for ax, t in zip(axs[:4], K):
@@ -55,17 +55,21 @@ def main():
             if task != t:
                 continue
             xs = sorted(d)
-            ax.plot(xs, [d[x] for x in xs], marker="o", ls="-" if lf == 0.1 else "--", color=col[(model, inp)],
-                    label=f"{lab[(model, inp)]}, {lf:g} labels")
-        ax.set_xscale("log"); ax.set_xlabel("pretraining data fraction"); ax.set_title(K[t][1] + " (frozen)", fontsize=9)
+            ax.plot(xs, [d[x] for x in xs], marker="s" if lf == 0.1 else "o", ms=7, lw=1.8, mew=1.6,
+                    mfc=col[(model, inp)] if lf == 0.1 else "white", ls="-" if lf == 0.1 else "--",
+                    color=col[(model, inp)], label=f"{lab[(model, inp)]}, {lf:g} labels")
+        ax.set_xscale("log"); ax.set_xlabel("pretraining data fraction", fontsize=11)
+        ax.set_title(K[t][1] + " (frozen)", fontsize=11)
         ax.grid(alpha=0.3)
-    axs[0].legend(fontsize=6)
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=len(l), fontsize=11, handlelength=3.5, frameon=False)
     for key, d in sorted(vl.items()):
         xs = sorted(d)
-        axs[4].plot(xs, [d[x] for x in xs], marker="o", color=col[key], label=lab[key])
-    axs[4].set_xscale("log"); axs[4].set_xlabel("pretraining data fraction"); axs[4].legend(fontsize=7)
-    axs[4].set_title("pretraining val masked-charge loss (×mean baseline)", fontsize=9); axs[4].grid(alpha=0.3)
-    fig.tight_layout()
+        axs[4].plot(xs, [d[x] for x in xs], marker="D", ms=7, lw=1.8, color=col[key], label=lab[key])
+    axs[4].set_xscale("log"); axs[4].set_xlabel("pretraining data fraction", fontsize=11)
+    axs[4].legend(fontsize=10, handlelength=3)
+    axs[4].set_title("pretraining val masked-charge loss (×mean)", fontsize=11); axs[4].grid(alpha=0.3)
+    fig.tight_layout(rect=(0, 0.1, 1, 1))
     fig.savefig(out, dpi=130)
     print(json.dumps({str(k): v for k, v in vl.items()}))
 
