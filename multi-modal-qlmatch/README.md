@@ -41,5 +41,9 @@ $PY scripts/summarize.py $QLFM_WORK/e3
   `scripts/box_run.sh NAME TIMEOUT <<'EOF' ... EOF`.
 - `scripts/env.sh` sets `TMPDIR=/tmp` (mpiexec's long TMPDIR breaks DataLoader workers).
 - Running log of decisions/findings: `docs/round1-log.md`.
+- Round-1 tech note: `docs/technote-round1.md` (Markdown) and `docs/technote-round1.pdf`
+  (LaTeX source in `docs/technote-round1-tex/`; build with Tectonic:
+  `tectonic -X compile docs/technote-round1-tex/technote-round1.tex`, a user-space binary is in
+  `$QLFM_WORK/tools/tectonic/`).
 
 Data: MicroBooNE open samples (CC BY 4.0), Zenodo 10.5281/zenodo.8370883 and 10.5281/zenodo.7261921.

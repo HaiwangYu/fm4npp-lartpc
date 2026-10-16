@@ -181,7 +181,7 @@ Test-set metrics at 0.1% / 1% / 10% / 100% labels. Values at ≤1% are the mean 
   - Charge-only models must find a small interaction among about 26 cosmic muons from topology and drift-window cues alone.
   - With light, the in-time PMT pattern points to the neutrino. This is the learned counterpart of Wire-Cell's charge–light matching.
   - Light also helps flavor and energy, adding calorimetric and timing information.
-- **Charge-only from scratch fails on event-level tasks** at every tested learning rate (E5: flavor stays at the majority class; T2 AUC ≤ 0.77). The same architecture initialized from the C foundation model does learn: FT-C flavor 0.54, T2 AUC 0.87. Pretraining therefore turns an optimization problem the scratch model cannot solve into a learnable one.
+- **Charge-only from scratch fails on event-level tasks** at every tested learning rate (E5: flavor stays at the majority class; T2 AUC ≤ 0.77). The same architecture initialized from the C foundation model does learn: FT-C flavor 0.54–0.55 and T2 AUC 0.84–0.87 at 10–100% labels. Pretraining therefore turns an optimization problem the scratch model cannot solve into a learnable one.
 - **Flavor shortcut check.** The νe sample supplies most νeCC training events, so a model could learn to recognize the sample instead of the flavor. On test events, νeCC efficiency is the same or higher for inclusive-sample νe (n=79) than for νe-sample events (FT-CL: 0.86 vs 0.80). We see no evidence of a sample shortcut.
 
 ### 5.2 E4: pretraining-data scaling (Q3)
