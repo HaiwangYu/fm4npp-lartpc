@@ -85,3 +85,42 @@
   | flavor macro-F1 | 0.512 | 0.417 | 0.340 |
   | T4 resolution | 0.417 | 0.470 | 0.465 |
   | T1 F1 | 0.754 | 0.489 | 0.19 |
+
+### 2026-10-16: E3 complete, E4 complete, E5 checks
+- **E3** (192 runs) is in `docs/figures/e3_summary.md` and `e3_label_efficiency.png`.
+- **Flavor shortcut check.** Most νeCC training events come from the νe sample, so the model might identify the sample rather than the flavor. It does not appear to: on test events, νeCC efficiency for inclusive-sample νe (n=79) is equal to or higher than for νe-sample events (n=2849):
+
+  | Model | Inclusive-sample νe | νe-sample |
+  |---|---|---|
+  | FT-CL | 0.86 | 0.80 |
+  | frozen-CL | 0.72 | 0.68 |
+  | FT-C | 0.70 | 0.64 |
+  | scratch-CL | 0.28 | 0.29 |
+
+- **E5 learning-rate scan.** Charge-only (C) scratch at 10% labels, with lr 1e-4 and 1e-3 (default 3e-4):
+  - flavor: 0.277 and 0.267
+  - event ν/cosmic AUC: 0.692 and 0.561
+
+  Neither beats the default lr (0.277 / 0.769), so the failure of C scratch on event-level tasks is not an lr artifact.
+- **E5 layer decay 0.9 for hit fine-tuning, 0.1% labels.** CL: 0.788 (0.773 with the default 0.75). C: 0.001 (unchanged).
+- **E4 data scaling (frozen probes).**
+  - CL improves from 1% to 10% of the pretraining data, then plateaus: 10% ≈ 50% ≈ 90% within single-seed jitter.
+  - C is flat.
+  - The pretraining val loss shows the same shape.
+  - The likely cause is compute/capacity: every run sees about 4.4M events on a 6.6M-parameter model.
+  - Figure: `docs/figures/e4_scaling.png`.
+- **E6 (iteration on Q3).** A 21M model (d=384, depth 12) at 2× steps (34k), CL pretrained on 10% and 90%, followed by frozen and fine-tune probes. It tests whether data scaling reappears with more capacity and compute.
+
+### 2026-10-16: E5 and E6 final; round 1 concluded
+- **E5, hit fine-tuning with layer decay 0.9 at 10% labels:** C 0.952 (was 0.924 at 0.75), CL 0.960 (was 0.948). This is level with scratch (0.959 / 0.966).
+- **E6, larger model** (d=384, 12 layers, 21M params, 34k steps), CL on 10% and 90% of the data.
+  - Pretraining validation losses:
+
+    | Data | Masked charge | Masked light | Charge→light |
+    |---|---|---|---|
+    | 10% | 0.328 | 0.431 | 0.539 |
+    | 90% | 0.330 | 0.413 | 0.512 |
+
+  - Every probe improves a lot over the small model. Frozen T1 F1 goes from 0.73 to 0.91; frozen T3 macro-F1 at 10% labels from 0.66 to 0.76.
+  - Pretraining on 90% beats 10% in all 9 non-saturated comparisons.
+- **Tech note:** `docs/technote-round1.md`. Total compute is about 29 node-hours.
