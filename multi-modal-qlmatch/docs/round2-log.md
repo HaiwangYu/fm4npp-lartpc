@@ -46,3 +46,12 @@ Plan: `docs/plan-round2.md`. Survey: `docs/round2-survey.md`. Tracking: GitHub i
    - Panda and PoLAr-MAE ran faster than the gate estimate (0.43 and 0.16 s per iteration), so their schedules would have used only about 2.2 h and 1.5 h of the agreed budget. `pimm` restores the schedule length on resume, so it cannot be extended mid-run. Both were restarted with schedule lengths derived from the measured rates: Panda 1.84M plane-clouds; PoLAr-MAE 3 × 1.67M. Each fills about 3.5 h of training across four 1-hour jobs.
 2. **Budget-based schedules for our own trainer.** `train_pretrain` gained `--budget-h`: the run measures its step rate after 200 steps, fixes the total number of steps, and stores it in the checkpoint so resumed jobs keep it. qlfm-SD uses this.
 3. **Rank detection under `torchrun`.** `mpiexec` left `PMI_*` variables in the environment, which would have made every rank believe it was alone. `dist.init` now prefers `torchrun`'s `RANK`/`WORLD_SIZE`, and the bundle commands unset `PMI_*`.
+
+### Downstream and results (12:00–14:00)
+- All pretraining finished. Reference downstream runs needed gradient accumulation:
+  - FM4NPP and PoLAr-MAE fine-tuning: 4 micro-batches of 8.
+  - Panda, all modes including evaluation: the same.
+  - This avoids running out of memory; it gives the same optimizer step as batch 32.
+- The long-run slot rule now covers fine-tuning at ≥1% labels and accumulated runs at ≥1%.
+- All 224 R2P runs are complete. Results: `docs/figures/round2_comparison.{md,png}`. Tech note: `docs/technote-round2.md`.
+- Round-2 compute: **37.6 node-hours** (`docs/figures/round2_node_hours.md`).
