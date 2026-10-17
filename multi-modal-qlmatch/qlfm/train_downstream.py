@@ -16,9 +16,8 @@ import torch.nn.functional as F
 from qlfm.data.dataset import Corpus, EventDataset, collate, to_device
 from qlfm.data.labels import EV_KEYS, HIT_NU_EDEP_MEV, N_OUT, event_labels
 from qlfm.evaluate import metrics_for
-from qlfm.models.fm import FM, FMCfg
-from qlfm.models.heads import AttnPool, HitHead, MeanLinear
-from qlfm.tokenize import TokCfg
+from qlfm.models.heads import AttnPool, HitHead, LateLight, MeanLinear
+from qlfm.ref import build_backbone
 
 
 def get_args(argv=None):
@@ -27,7 +26,9 @@ def get_args(argv=None):
     ap.add_argument("--splits", default=os.path.expandvars("$QLFM_WORK/cache/splits_all.npz"))
     ap.add_argument("--task", required=True, choices=list(N_OUT))
     ap.add_argument("--mode", required=True, choices=["scratch", "frozen", "finetune", "linear"])
-    ap.add_argument("--fm", default=None, help="pretrained fm.pt (frozen/finetune/linear)")
+    ap.add_argument("--fm", default=None, help="pretrained checkpoint (frozen/finetune/linear)")
+    ap.add_argument("--backbone", default="qlfm", choices=["qlfm", "fm4npp", "panda", "polarmae"])
+    ap.add_argument("--late-light", type=int, default=0, help="late-fused PMT light in the head")
     ap.add_argument("--light", type=int, default=1, help="scratch only; otherwise taken from the FM")
     ap.add_argument("--label-frac", type=float, default=0.01)
     ap.add_argument("--out", required=True)
@@ -56,27 +57,40 @@ def get_args(argv=None):
 
 
 class DownstreamModel(nn.Module):
-    def __init__(self, fm: FM, task, mode):
+    """Backbone (common interface, qlfm/ref) + identical heads; optional late-fused PMT light."""
+
+    def __init__(self, backbone, task, mode, late_light=False):
         super().__init__()
-        self.fm, self.task, self.mode = fm, task, mode
-        d = fm.cfg.d
+        self.backbone, self.task, self.mode = backbone, task, mode
+        d = backbone.d
+        self.light = LateLight(d) if late_light else None
         if task == "hit":
-            self.head = HitHead(d, fm.charge.hit_dim)
+            self.head = HitHead(d, backbone.hit_dim, extra_dim=d if late_light else 0)
         elif mode == "linear":
             self.head = MeanLinear(d, N_OUT[task])
         else:
             self.head = AttnPool(d, out_dim=N_OUT[task])
 
+    def train(self, mode=True):
+        super().train(mode)
+        if self.mode in ("frozen", "linear"):               # frozen backbones never use dropout / drop-path
+            self.backbone.eval()
+        return self
+
     def forward(self, b):
         if self.mode in ("frozen", "linear"):
             with torch.no_grad():
-                o = self.fm(b)
+                o = self.backbone(b)
         else:
-            o = self.fm(b)
+            o = self.backbone(b)
+        z, evt = o["z"], o["evt"]
+        if self.light is not None:
+            zl, levt, lpool = self.light(b)
         if self.task == "hit":
-            return self.head(o["h_hit"], o["zc"], o["ct"].hit2tok), o
-        z = torch.cat([o["zc"], o["zl"]]) if o["zl"] is not None else o["zc"]
-        evt = torch.cat([o["ct"].tok_evt, o["lt"].evt]) if o["zl"] is not None else o["ct"].tok_evt
+            extra = lpool[b["hit_evt"]] if self.light is not None else None
+            return self.head(o["h_hit"], z, o["hit2tok"], extra), o
+        if self.light is not None:
+            z, evt = torch.cat([z.to(zl.dtype), zl]), torch.cat([evt, levt])
         return self.head(z, evt, b["n_events"]), o
 
 
@@ -92,17 +106,16 @@ def loss_fn(task, out, b, y, class_w):
 
 def layer_groups(model, base_lr, decay):
     """Layer-wise lr decay for fine-tuning: head/last block get base_lr, embeddings the smallest."""
-    depth = len(model.fm.encoder.blocks)
+    bb = model.backbone
+    depth = bb.n_layers - 1
     groups = []
     for n, p in model.named_parameters():
         if not p.requires_grad:
             continue
-        if n.startswith("head"):
+        if not n.startswith("backbone."):                 # heads and late light
             lid = depth + 1
-        elif ".blocks." in n:
-            lid = int(n.split(".blocks.")[1].split(".")[0]) + 1
         else:
-            lid = 0
+            lid = bb.layer_id(n[len("backbone."):])
         groups.append({"params": [p], "lr_scale": decay ** (depth + 1 - lid),
                        "weight_decay": 0.05 if p.ndim >= 2 else 0.0})
     for g in groups:
@@ -160,22 +173,12 @@ def main(argv=None):
     te = pick(sp["test"][elig[sp["test"]]], args.n_test, 12)
 
     # ---- model ----
-    if args.mode == "scratch":
-        tok = TokCfg(cell_wires=args.cell_wires, cell_ticks=args.cell_ticks, max_tokens=args.max_tokens)
-        fm = FM(FMCfg(d=args.d, depth=args.depth, heads=args.heads, use_light=bool(args.light), tok=tok,
-                      pos_mode=args.pos_mode, pos_freq=args.pos_freq))
-    else:
-        s = torch.load(args.fm, map_location="cpu", weights_only=False)
-        a = s["args"]
-        tok = TokCfg(cell_wires=a["cell_wires"], cell_ticks=a["cell_ticks"], max_tokens=args.max_tokens)
-        fm = FM(FMCfg(d=a["d"], depth=a["depth"], heads=a["heads"], use_light=bool(a["light"]), tok=tok,
-                      pos_mode=a.get("pos_mode", "fourier"), pos_freq=a.get("pos_freq", 16)))
-        fm.load_state_dict(s["fm"])
-    model = DownstreamModel(fm, args.task, args.mode).to(dev)
+    backbone = build_backbone(args.backbone, args, None if args.mode == "scratch" else args.fm)
+    model = DownstreamModel(backbone, args.task, args.mode, bool(args.late_light)).to(dev)
     if args.mode in ("frozen", "linear"):
-        for p in fm.parameters():
-            p.requires_grad_(False)
-        fm.eval()
+        for n_, p in backbone.named_parameters():
+            p.requires_grad_("adapter_" in n_)            # reference adapters (e.g. FM4NPP layer mix) stay trainable
+        backbone.eval()
 
     lr = args.lr or {"scratch": 3e-4, "finetune": 2e-4, "frozen": 1e-3, "linear": 3e-3}[args.mode]
     if args.mode == "finetune":
@@ -208,7 +211,7 @@ def main(argv=None):
     ck = os.path.join(args.out, "best.pt")
     model.train()
     if args.mode in ("frozen", "linear"):
-        fm.eval()
+        backbone.eval()
     done = False
     while not done:
         for b in trl:
@@ -232,7 +235,7 @@ def main(argv=None):
                 if m["score"] > best:
                     best, best_step = m["score"], step
                     torch.save({k: v for k, v in model.state_dict().items()
-                                if args.mode not in ("frozen", "linear") or k.startswith("head")}, ck)
+                                if args.mode not in ("frozen", "linear") or not k.startswith("backbone.") or "adapter_" in k}, ck)
             if step >= steps or (time.time() - t0) / 60 > args.time_limit:
                 done = True
                 break

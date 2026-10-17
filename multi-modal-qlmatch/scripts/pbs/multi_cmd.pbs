@@ -1,0 +1,20 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -l filesystems=home:eagle
+#PBS -j oe
+# Run one shell command per node: CMDS_FILE lines "LOGFILE<TAB>command". Each command gets the whole node and
+# sees $WALL_LEFT (seconds) so it can stop before walltime.
+# qsub -q debug-scaling -l select=3:system=polaris -l walltime=01:00:00 -v CMDS_FILE=... multi_cmd.pbs
+WALL=$(qstat -f $PBS_JOBID | awk -F'= ' '/Resource_List.walltime/{split($2,a,":"); print a[1]*3600+a[2]*60+a[3]}')
+mapfile -t NODES < <(sort -u $PBS_NODEFILE)
+i=0
+while IFS=$'\t' read -r LOG CMD; do
+  [ -z "$CMD" ] && continue
+  [ $i -ge ${#NODES[@]} ] && { echo "not enough nodes for: $CMD"; break; }
+  hf=$PBS_O_WORKDIR/hosts_${PBS_JOBID%%.*}_$i; echo "${NODES[$i]}" > $hf
+  mkdir -p $(dirname $LOG)
+  mpiexec -n 1 --ppn 1 --hostfile $hf --cpu-bind none env WALL_LEFT=$((WALL - 120)) bash -c "$CMD" >> $LOG 2>&1 &
+  echo "node ${NODES[$i]}: $CMD"
+  i=$((i+1))
+done < $CMDS_FILE
+wait
