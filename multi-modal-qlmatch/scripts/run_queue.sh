@@ -21,7 +21,13 @@ worker() {
       mkdir $out.lock 2>/dev/null || continue
       mkdir -p $out
       echo "[$(hostname) gpu$gpu $(/bin/date +%T)] -> $out (${left} min left)"
-      CUDA_VISIBLE_DEVICES=$gpu timeout $((left*60)) $PY -m $line --time-limit $((left-5)) > $out/run.log 2>&1
+      # optional interpreter prefix: "@pimm " (pimm venv) or "@mamba " (mamba_ssm venv)
+      local py=$PY cmd=$line
+      case "$line" in
+        "@pimm "*)  py=$QLFM_WORK/tools/pimm/.venv/bin/python; cmd=${line#@pimm } ;;
+        "@mamba "*) py=$QLFM_WORK/tools/venv-mamba/bin/python; cmd=${line#@mamba } ;;
+      esac
+      CUDA_VISIBLE_DEVICES=$gpu PIMM_ROOT=$QLFM_WORK/tools/pimm timeout $((left*60)) $py -m $cmd --time-limit $((left-5)) > $out/run.log 2>&1
       rmdir $out.lock
       ran=1
     done < $TASKS

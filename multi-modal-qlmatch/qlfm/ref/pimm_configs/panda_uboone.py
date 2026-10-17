@@ -30,7 +30,7 @@ use_wandb = False
 SCALE = 600.0
 grid_size = 0.3 / SCALE
 warmup_ratio = 0.05
-num_samples = 1_150_000          # plane-clouds; ~4 node-hours at the measured Sonata throughput
+num_samples = 1_840_000          # plane-clouds: measured 0.434 s/iter x 64 -> ~3.5 h of training (4 x 1-h jobs)
 
 model = dict(
     type="Sonata-v1m1",
@@ -138,7 +138,7 @@ hooks = [   # as in the Panda config, minus wandb and the PILArNet-label Pretrai
     dict(type="WeightDecayScheduler", base_value=base_wd, final_value=final_wd, warmup_ratio=1.0),
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
-    dict(type="CheckpointSaverIteration", save_freq=500),
+    dict(type="CheckpointSaverIteration", save_freq=200),
     dict(type="PrototypeUsageLogger", log_frequency=50, prefix="prototypes"),
     dict(type="FeatureStdMonitor", log_frequency=50, prefix="feature_std", monitor_student=True, monitor_teacher=True,
          track_channels=False),

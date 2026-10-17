@@ -24,7 +24,7 @@ find_unused_parameters = False
 seed = 0
 use_wandb = False
 warmup_ratio = 0.05
-num_samples = 2_200_000            # plane-clouds per epoch (set from the measured throughput)
+num_samples = 1_670_000            # x loop 3 = 5.0M plane-clouds: measured 0.16 s/iter x 64 -> ~3.5 h of training
 epoch = 1
 
 _shared_transformer_kwargs = dict(postnorm=True, add_pos_at_every_layer=True, drop_rate=0.0,
@@ -60,14 +60,14 @@ data = dict(
                splits=f"{W}/cache/splits_all.npz", subset="pre_f0.90",
                transform=[_log, _norm, _rot_z, dict(type="ToTensor"),
                           dict(type="Collect", keys=("coord", "energy"), feat_keys=("coord", "energy"))],
-               max_len=num_samples, seed=0),
+               max_len=num_samples, seed=0, loop=3),
 )
 
 hooks = [
     dict(type="ParameterCounter", show_details=False, show_gradients=False, sort_by_params=True, min_params=1),
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
-    dict(type="CheckpointSaverIteration", save_freq=500),
+    dict(type="CheckpointSaverIteration", save_freq=200),
     dict(type="WeightDecayExclusion", exclude_bias_from_wd=True, exclude_norm_from_wd=True,
          exclude_gamma_from_wd=True, exclude_token_from_wd=True, exclude_ndim_1_from_wd=True),
     dict(type="CheckpointLoader"),

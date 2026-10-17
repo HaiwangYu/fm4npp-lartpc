@@ -56,6 +56,8 @@ def get_args(argv=None):
     ap.add_argument("--klen", type=int, default=30)
     ap.add_argument("--d-state", type=int, default=16)
     ap.add_argument("--dropout", type=float, default=0.1)
+    ap.add_argument("--budget-h", type=float, default=None,
+                    help="training-hour budget: after 200 steps the measured rate fixes --steps (kept on resume)")
     return ap.parse_args(argv)
 
 
@@ -141,6 +143,8 @@ def main(argv=None):
         mae.load_state_dict(s["mae"])
         opt.load_state_dict(s["opt"])
         step = s["step"]
+        if s.get("steps_final"):
+            args.steps = s["steps_final"]
     if step >= args.steps:
         if dist.is_main():
             print(f"already done ({step} steps)", flush=True)
@@ -164,13 +168,16 @@ def main(argv=None):
 
     def save():
         if dist.is_main():
-            torch.save({"mae": mae.state_dict(), "opt": opt.state_dict(), "step": step, "args": vars(args)},
-                       ck + ".tmp")
+            torch.save({"mae": mae.state_dict(), "opt": opt.state_dict(), "step": step, "args": vars(args),
+                        "steps_final": steps_final}, ck + ".tmp")
             os.replace(ck + ".tmp", ck)
             # self-distillation: the EMA teacher is the downstream backbone (DINO / Sonata / Panda convention)
             fm_save = mae.teacher if args.method == "sd" else fm
             torch.save({"fm": fm_save.state_dict(), "args": vars(args), "step": step}, os.path.join(args.out, "fm.pt"))
 
+    steps_final = args.steps if (os.path.exists(ck) and torch.load(ck, map_location="cpu", weights_only=False).get(
+        "steps_final")) else None
+    t_rate = None
     t_log, ev_log, acc = time.time(), 0, {}
     model.train()
     it = iter(loader)
@@ -178,6 +185,17 @@ def main(argv=None):
         b = to_device(next(it), dev)
         for g in opt.param_groups:
             g["lr"] = lr_at(step, args, base_lr)
+        if args.budget_h and steps_final is None:
+            if step == 50:
+                t_rate = time.time()
+            elif step == 200:
+                rate = torch.tensor(150.0 / (time.time() - t_rate), device=dev)
+                if world > 1:
+                    torch.distributed.broadcast(rate, 0)
+                steps_final = int(float(rate) * args.budget_h * 3600)
+                args.steps = steps_final
+                if dist.is_main():
+                    print(f"[budget] {float(rate):.2f} steps/s -> steps = {steps_final}", flush=True)
         mae.progress = step / args.steps
         with torch.autocast("cuda", dtype=torch.bfloat16):
             out = model(b)
