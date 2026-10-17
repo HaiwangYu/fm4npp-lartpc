@@ -34,6 +34,7 @@ def get_args(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--bs", type=int, default=32)
+    ap.add_argument("--accum", type=int, default=1, help="gradient accumulation: micro-batch = bs / accum")
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--epochs", type=float, default=30)
     ap.add_argument("--min-steps", type=int, default=400)
@@ -199,9 +200,9 @@ def main(argv=None):
         persistent_workers=shuffle)
     if len(tr) < 4:
         raise SystemExit(f"too few labeled training events ({len(tr)})")
-    trl = mk(tr, True, min(args.bs, max(2, len(tr) // 2)))
-    val = mk(va, False, args.bs)
-    tel = mk(te, False, args.bs)
+    trl = mk(tr, True, max(1, min(args.bs, max(2, len(tr) // 2)) // args.accum))
+    val = mk(va, False, max(1, args.bs // args.accum))
+    tel = mk(te, False, max(1, args.bs // args.accum))
     yt = torch.from_numpy(target).to(dev) if target is not None else None
     info = dict(vars(args), n_train=len(tr), n_val=len(va), n_test=len(te), steps=steps,
                 n_trainable=sum(p.numel() for p in model.parameters() if p.requires_grad))
@@ -214,17 +215,23 @@ def main(argv=None):
         backbone.eval()
     done = False
     while not done:
+        micro = 0
         for b in trl:
             b = to_device(b, dev)
-            for g in opt.param_groups:
-                w = min(1.0, (step + 1) / max(1, steps // 20))
-                g["lr"] = lr * g["lr_scale"] * w * 0.5 * (1 + np.cos(np.pi * step / steps))
+            if micro == 0:
+                for g in opt.param_groups:
+                    w = min(1.0, (step + 1) / max(1, steps // 20))
+                    g["lr"] = lr * g["lr_scale"] * w * 0.5 * (1 + np.cos(np.pi * step / steps))
+                opt.zero_grad(set_to_none=True)
             y = yt[b["gidx"]] if yt is not None else None
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 out, _ = model(b)
             loss = loss_fn(args.task, out.float(), b, y, class_w)
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
+            (loss / args.accum).backward()
+            micro += 1
+            if micro < args.accum:
+                continue
+            micro = 0
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             step += 1
