@@ -43,7 +43,12 @@ def planar_clouds(b):
 
 
 def _load_state(model, ckpt_dir):
-    path = ckpt_dir if ckpt_dir.endswith(".pth") else os.path.join(ckpt_dir, "model", "model_last.pth")
+    from pimm.utils.path import latest_complete_checkpoint
+    path = ckpt_dir
+    if os.path.isdir(os.path.join(ckpt_dir, "model")):
+        path = str(latest_complete_checkpoint(os.path.join(ckpt_dir, "model")))
+    if os.path.isdir(path):
+        path = os.path.join(path, "weights.pth")
     sd = torch.load(path, map_location="cpu", weights_only=False)
     sd = sd.get("state_dict", sd)
     sd = {re.sub(r"^module\.", "", k): v for k, v in sd.items()}

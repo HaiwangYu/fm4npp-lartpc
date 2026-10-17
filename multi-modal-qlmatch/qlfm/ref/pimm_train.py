@@ -1,7 +1,7 @@
 """Launch pimm training with our MicroBooNE dataset registered (run under torchrun in the pimm venv).
 
 torchrun --nproc_per_node 4 qlfm/ref/pimm_train.py --config-file CFG --options save_path=OUT
-Resumes automatically from OUT/model/model_last.pth when present (for chained 1-hour PBS jobs).
+Resumes automatically from the newest complete checkpoint in OUT/model (pimm: last/, last.prev/ or model_last.pth) (for chained 1-hour PBS jobs).
 """
 import glob
 import os
@@ -21,11 +21,12 @@ from pimm import train as pimm_train  # noqa: E402
 def main():
     argv = sys.argv[1:]
     save = next((a.split("=", 1)[1] for a in argv if a.startswith("save_path=")), None)
-    if save:
-        ck = sorted(glob.glob(os.path.join(save, "model", "model_last.pth")))
-        if ck:
-            argv += [f"resume=True", f"weight={ck[-1]}"]
-            print(f"[pimm_train] resuming from {ck[-1]}", flush=True)
+    if save and os.path.isdir(os.path.join(save, "model")):
+        from pimm.utils.path import latest_complete_checkpoint
+        ck = latest_complete_checkpoint(os.path.join(save, "model"))
+        if ck is not None:
+            argv += ["resume=True", f"weight={ck}"]
+            print(f"[pimm_train] resuming from {ck}", flush=True)
     sys.argv = [sys.argv[0]] + argv
     pimm_train.main()
 
