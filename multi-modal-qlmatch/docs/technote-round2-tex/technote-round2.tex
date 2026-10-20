@@ -37,13 +37,13 @@ With at least 1\% of labels (3--7k events), the 21M-parameter qlfm-M is the best
 
 With only 0.1\% of labels, the Pandora+BDT reference beats every frozen foundation model on flavor and energy.
 
-A per-event analysis of 80 easy and hard events (Appendix~\ref{app:displays}) shows that the residual errors cluster in a few places:
+A per-event analysis of 120 easy, boundary and hard events (Appendix~\ref{app:displays}) shows that the residual errors cluster in a few places:
 \begin{itemize}
   \item at the label boundaries (out-of-active-volume neutrinos; NC versus \numu CC);
   \item at the tails of the energy spectrum;
   \item in events whose neutrino deposits only a few percent of the charge.
 \end{itemize}
-Round 2 used 37.6 Polaris node-hours.
+Round 2 used 38.7 Polaris node-hours.
 \end{abstract}
 
 \tableofcontents
@@ -122,8 +122,15 @@ All methods use the same corpus, splits, tasks and metrics as round~1.
     \item 2, out-of-AV $\nu$: more than 5 $\nu$ hits otherwise.
   \end{itemize}
   Headline metric: AUC of class 1 versus class 0.
-\item[T3 flavor.] \numu CC, \nue CC or NC, for events with a visible in-AV $\nu$. Metric: macro-F1.
-\item[T4 energy.] Regression of $\log E_\nu$. Resolution is half the 16--84\% width of $E_\text{pred}/E_\text{true}-1$; lower is better.
+\item[T3 flavor.] \numu CC, \nue CC or NC, for events with a visible $\nu$ whose vertex is inside the fiducial volume (AV minus 3\,cm). Metric: macro-F1.
+\item[T4 energy.] Regression of $\log E_\nu$ for CC events with a visible $\nu$ and a fiducial vertex. Resolution is half the 16--84\% width of $E_\text{pred}/E_\text{true}-1$; lower is better.
+\begin{itemize}
+  \item \textbf{$E_\nu$ is the true energy of the incoming neutrino} (generator truth, column \code{nu\_energy} of \code{event\_table}). It is \emph{not} the deposited or visible energy.
+  \item A large part of it is never seen as charge: exiting muons, neutrons, nuclear binding, and energy below threshold. The $\nu$'s MC energy deposited on collection-plane hits is a median 47\% of $E_\nu$: 44\% for \numu CC, which often has exiting muons, and 57\% for \nue CC.
+  \item A log-linear calibration of that \emph{true} deposited energy to $E_\nu$ reaches only 0.36 resolution on the same test events. This is an oracle for pure calorimetry with perfect $\nu$/cosmic separation.
+  \item The best models do better (0.28), so they also use topology: track lengths, containment and event type.
+  \item Pandora direct calibrates the summed collection charge of its $\nu$ slice to $\log E_\nu$ in the same way.
+\end{itemize}
 \end{description}
 Test subsets for T2--T4 are 10{,}000 events drawn with a fixed seed. The Pandora references (Sec.~\ref{sec:pandora}) were scored on a 20{,}000-event superset drawn from the same permutation.
 
@@ -327,7 +334,7 @@ Matrix & 8 backbones $\times$ 4 tasks $\times$ 7 runs = 224 runs, all complete\\
 \caption{All four tasks versus label fraction. Solid lines with circles: frozen backbone + head. Dotted lines with triangles: fine-tuned. Black dashed: Pandora+BDT (+light). Dash-dot: Pandora direct.}
 \end{figure}
 
-In the tables below, $\pm$ is the spread over 2 seeds; every other entry is a single seed. \pft\ marks Panda ``fine-tune'' entries: these runs trained only the head, because the \code{pimm} teacher backbone has \code{requires\_grad=False} (Sec.~\ref{sec:caveats}). ``C-only diag'' is the frozen run at 1\% without the late-fused light; qlfm-CL backbones still contain light internally.
+In the tables below, $\pm$ is the spread over 2 seeds; every other entry is a single seed. \pft\ marks the Panda fine-tune entries. They come from a re-run with a trainable backbone; the first runs had trained only the head (Sec.~\ref{sec:caveats}). ``C-only diag'' is the frozen run at 1\% without the late-fused light; qlfm-CL backbones still contain light internally.
 
 \newcommand{\rtabhead}{\toprule
 Method & frozen 0.1\% & frozen 1\% & frozen 10\% & FT 0.1\% & FT 1\% & C-only diag\\\midrule}
@@ -339,7 +346,7 @@ qlfm-S CL (MAE, 6.6M) & 0.953$\pm$.001 & 0.970 & 0.974 & 0.953 & 0.990 & 0.972\\
 qlfm-S C (MAE, 6.6M) & 0.943$\pm$.001 & 0.960 & 0.962 & 0.664 & 0.956 & 0.666\\
 qlfm-SD CL (21M) & 0.949$\pm$.000 & 0.959 & 0.959 & 0.940 & 0.959 & 0.605\\
 qlfm-SD C (21M) & 0.942$\pm$.000 & 0.957 & 0.957 & 0.690 & 0.952 & 0.609\\
-Panda (21M) & 0.938$\pm$.007 & 0.978 & 0.984 & 0.937\pft & 0.974\pft & 0.914\\
+Panda (21M) & 0.938$\pm$.007 & 0.978 & 0.984 & 0.830\pft & 0.968\pft & 0.914\\
 PoLAr-MAE (22M) & 0.950$\pm$.001 & 0.962 & 0.963 & 0.920 & 0.964 & 0.660\\
 FM4NPP (4.9M) & 0.943$\pm$.000 & 0.961 & 0.963 & 0.626 & 0.944 & 0.712\\
 \midrule
@@ -356,7 +363,7 @@ qlfm-S CL & 0.416$\pm$.002 & 0.624 & 0.642 & 0.512 & 0.622 & 0.625\\
 qlfm-S C & 0.457$\pm$.000 & 0.509 & 0.520 & 0.389 & 0.469 & 0.429\\
 qlfm-SD CL & 0.389$\pm$.003 & 0.450 & 0.423 & 0.316 & 0.382 & 0.297\\
 qlfm-SD C & 0.369$\pm$.001 & 0.437 & 0.439 & 0.314 & 0.274 & 0.303\\
-Panda & 0.465$\pm$.001 & 0.679 & 0.734 & 0.492\pft & 0.642\pft & 0.666\\
+Panda & 0.465$\pm$.001 & 0.679 & 0.734 & 0.506\pft & 0.690\pft & 0.666\\
 PoLAr-MAE & 0.446$\pm$.004 & 0.554 & 0.570 & 0.411 & 0.563 & 0.497\\
 FM4NPP & 0.445$\pm$.003 & 0.546 & 0.557 & 0.355 & 0.485 & 0.507\\
 \midrule
@@ -373,7 +380,7 @@ qlfm-S CL & 0.465$\pm$.007 & 0.354 & 0.333 & 0.411 & 0.318 & 0.345\\
 qlfm-S C & 0.484$\pm$.001 & 0.378 & 0.378 & 0.563 & 0.412 & 0.441\\
 qlfm-SD CL & 0.483$\pm$.005 & 0.367 & 0.370 & 0.469 & 0.415 & 0.439\\
 qlfm-SD C & 0.475$\pm$.002 & 0.391 & 0.387 & 0.477 & 0.426 & 0.454\\
-Panda & 0.496$\pm$.001 & 0.343 & 0.302 & 0.476\pft & 0.341\pft & 0.423\\
+Panda & 0.496$\pm$.001 & 0.343 & 0.302 & 0.484\pft & 0.358\pft & 0.423\\
 PoLAr-MAE & 0.469$\pm$.002 & 0.389 & 0.381 & 0.566 & 0.379 & 0.421\\
 FM4NPP & 0.454$\pm$.013 & 0.369 & 0.358 & 0.567 & 0.334 & 0.420\\
 \midrule
@@ -390,7 +397,7 @@ qlfm-S CL & 0.502$\pm$.005 & 0.685 & 0.685 & 0.783 & 0.902 & 0.675\\
 qlfm-S C & 0.080$\pm$.001 & 0.429 & 0.440 & 0.008 & 0.828 & 0.170\\
 qlfm-SD CL & 0.010$\pm$.001 & 0.141 & 0.116 & 0.001 & 0.818 & 0.000\\
 qlfm-SD C & 0.032$\pm$.003 & 0.147 & 0.122 & 0.001 & 0.657 & 0.004\\
-Panda & 0.536$\pm$.003 & 0.715 & 0.725 & 0.381\pft & 0.653\pft & 0.629\\
+Panda & 0.536$\pm$.003 & 0.715 & 0.725 & 0.656\pft & 0.823\pft & 0.629\\
 PoLAr-MAE & 0.167$\pm$.025 & 0.537 & 0.526 & 0.491 & 0.670 & 0.351\\
 FM4NPP & 0.200$\pm$.013 & 0.463 & 0.468 & 0.371 & 0.620 & 0.238\\
 \midrule
@@ -413,6 +420,7 @@ An algorithm is \emph{correct} on an event if:
 For each task we then select:
 \begin{itemize}
   \item \textbf{10 easy events}, those the most algorithms get right;
+  \item \textbf{10 boundary events}, where about half the algorithms are correct: 4 of 8 (T1: 3 or 4 of 7), drawn at random. These show what separates the methods;
   \item \textbf{10 hard events}, those the fewest get right.
 \end{itemize}
 Picks are spread round-robin over truth classes (T4: $E<0.7$, 0.7--1.5, $>1.5$\,GeV). For T1, the hardest events overall all have a $\nu$ charge fraction below 1\%, so 5 hard picks are taken from them and 5 from events with a $\nu$ charge fraction $\geq$5\%.
@@ -457,12 +465,44 @@ Pandora+BDT (+light) & -- & -- & 0.692 & 0.094 & 0.712 & 0.060 & 0.451 & 0.076\\
   On typical events qlfm-M is clearly ahead. Its per-event median F1$_q$ is 0.91, against 0.81 for Pandora's $\nu$ slice and 0.67, 0.64, 0.42, 0.32 and 0.01 for Panda, qlfm-S, PoLAr-MAE, FM4NPP and qlfm-SD.
 \end{description}
 
+\subsection{What separates the methods: boundary events}
+Boundary events are those where exactly half of the algorithms are correct (T1: 3 or 4 of 7). Table~\ref{tab:bnd} gives each algorithm's accuracy on all such test events. By construction the average is about 50\%; the spread shows who wins the split cases.
+\begin{table}[H]\centering\small
+\caption{Per-algorithm accuracy on boundary test events. The number of such events is in parentheses.}\label{tab:bnd}
+\begin{tabular}{lcccc}
+\toprule
+Algorithm & T1 hit (650) & T2 event $\nu$ (421) & T3 flavor (949) & T4 energy (1{,}104)\\
+\midrule
+qlfm-M CL & \best{0.998} & 0.577 & \best{0.737} & \best{0.618}\\
+qlfm-S CL & 0.617 & 0.568 & 0.537 & 0.533\\
+Panda & 0.672 & \best{0.587} & 0.640 & 0.528\\
+PoLAr-MAE & 0.102 & 0.442 & 0.380 & 0.443\\
+FM4NPP & 0.054 & 0.542 & 0.401 & 0.432\\
+qlfm-SD CL & 0.000 & 0.508 & 0.359 & 0.446\\
+Pandora direct / $\nu$ slice & 0.874 & 0.240 & 0.399 & 0.459\\
+Pandora+BDT (+light) & -- & 0.537 & 0.546 & 0.542\\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{itemize}
+  \item \textbf{T1:} on the split events, the winners are almost always qlfm-M (99.8\%) and Pandora's $\nu$ slice (87\%), followed by Panda and qlfm-S.
+  \item \textbf{T3:} qlfm-M is right on 74\% of split events, against 64\% for Panda and 55\% for the BDT.
+  \item \textbf{T4:} qlfm-M is right on 62\% of split events; the others are at 43--54\%.
+  \item \textbf{T2:} the split is nearly even among the light-using models (54--59\%); Pandora direct cannot predict the out-of-AV class and is lowest.
+\end{itemize}
+
 \subsection{Selected examples}
 These are referred to by their appendix labels.
 \begin{description}[leftmargin=1.2em]
 \item[T1 easy \#1] A 1.6\,GeV \nue CC shower downstream (vertex $z=910$\,cm), carrying 16\% of the event charge. The flash is centred on the vertex. Six of the seven algorithms reach F1$_q\geq0.94$. qlfm-SD (0.77) also tags parts of nearby cosmics, the diffuse $p(\nu)$ typical of its weak per-hit features.
-\item[T1 hard \#7] A 1.6\,GeV \numu CC with its vertex near the top of the TPC ($y=111$\,cm), crossed by several cosmics. Pandora's $\nu$ slice is a neighbouring cosmic track (F1$_q=0$). qlfm-M recovers about half of the $\nu$ charge (0.45) and Panda about a quarter (0.27). qlfm-S reaches 0.16; PoLAr-MAE, FM4NPP and qlfm-SD find nothing.
-\item[T2 hard \#1] Discussed above. A \numu CC with its vertex just below the AV is labelled no-$\nu$. The beam-coincident flash and a few $\nu$ hits lead every foundation model to ``out-of-AV $\nu$''. This is a label-boundary case, not a detector-level failure.
+\item[T1 hard \#7] A 1.6\,GeV \numu CC with its vertex near the top of the TPC ($y=111$\,cm), crossed by several cosmics. Pandora's $\nu$ slice is a neighbouring cosmic track (F1$_q=0$). qlfm-M recovers about half of the $\nu$ charge (0.45) and Panda about a third (0.30). qlfm-S reaches 0.16; PoLAr-MAE, FM4NPP and qlfm-SD find nothing.
+\item[T2 hard \#1] Discussed above. A \numu CC with its vertex just below the AV is labelled no-$\nu$. The flash matched to the true interaction time sits directly above the vertex ($z\approx500$\,cm, bottom PMTs), so the $\nu$'s light is in the event even though it left at most 5 hits. Every foundation model therefore says ``out-of-AV $\nu$''. This is a label-boundary case, not a detector-level failure.
+\item[T3 boundary \#2] A 2.8\,GeV \nue CC with a long, track-like secondary next to the electron shower. The algorithms split 4--4 between \nue CC and \numu CC (Panda says NC).
+  \begin{itemize}
+    \item qlfm-M separates the $\nu$ hits almost perfectly (F1$_q=0.98$) but calls the event \numu CC.
+    \item The smaller qlfm-S, PoLAr-MAE, FM4NPP and the BDT get it right.
+  \end{itemize}
+  A typical boundary case: a long track makes the event look \numu-like.
 \item[T3 hard \#1] A 0.5\,GeV \numu CC with its vertex 15\,cm below the top of the AV. Only a few short $\nu$ tracks are visible, and all eight algorithms call it NC. Without a clearly identifiable muon, low-energy \numu CC is topologically NC-like.
 \item[T4 hard \#4] A 0.35\,GeV \numu CC at $z=142$\,cm lies next to a large, bright cosmic-induced deposit at the same drift time, and the beam flash covers both.
   \begin{itemize}
@@ -474,14 +514,24 @@ These are referred to by their appendix labels.
 \end{description}
 
 \subsection{How to read the displays}
-Appendix~\ref{app:displays} shows all 80 selected events, one per page. Each page contains:
+Appendix~\ref{app:displays} shows all 120 selected events, one per page. Each page contains:
 \begin{itemize}
   \item a header with the task, easy or hard, the number of correct algorithms, run/subrun/event, the truth ($\nu$ flavor, CC/NC, energy, vertex, task label) and each algorithm's task prediction (\checkmark\ / $\times$);
   \item \textbf{Charge}: every hit at (global channel, tick), coloured by $\log_{10}$ integral. U, V and Y are concatenated (channels 0--2399, 2400--4799, 4800--8255). Tick increases downward, i.e.\ away from the anode;
-  \item \textbf{PMT view} (inspired by BEE): each PMT drawn at its $(z,y)$ position. Circle area is proportional to that PMT's PE in the largest beam flash (or the summed optical hits if there is no flash). Grey rings mark all 32 PMTs; the star marks the true $\nu$ vertex;
+  \item \textbf{PMT view} (inspired by BEE): each PMT drawn at its $(z,y)$ position. Circle area is proportional to that PMT's PE (scaled to the brightest PMT of the event) in the optical flash \emph{belonging to the $\nu$ interaction}. Grey rings mark all 32 PMTs; the star marks the true $\nu$ vertex.
+  \begin{itemize}
+    \item The open data store the true interaction time $t_\nu$ (in \code{event\_table/nu\_vtx\_wire\_time}, ns, spanning the 1.6\,$\mu$s BNB spill). The reconstructed flash time lags it by $0.478\,\mu$s: median over visible-$\nu$ events, 5--95\% range 0.457--0.506\,$\mu$s.
+    \item From all flashes of the event (\code{opflash\_table}, \code{opflashsumpe\_table}) we show the one closest to $t_\nu+0.478\,\mu$s, if it lies within 1\,$\mu$s.
+    \item Without a truth time the fallback would be the flash closest to the typical beam-flash time (4.56\,$\mu$s), not $t=0$. In these files the beam flashes sit at about 3.6--5.2\,$\mu$s after the time reference, and cosmic flashes occur throughout the readout window. Every overlay event carries a truth time, so the fallback is never used here.
+    \item The panel title gives the flash time, its PE, the number of flashes, and whether the matched flash is also the largest. For 4.5\% of visible-$\nu$ events with a flash, the largest flash is more than 0.3\,$\mu$s from the expected $\nu$ flash time, i.e.\ it is not the $\nu$ flash. Among the 120 displayed events, 6 have a matched flash that is not the largest, and 13 have no reconstructed flash within 1\,$\mu$s. In those 13 the panel instead sums the optical hits within $[-0.5,+3.5]\,\mu$s of the expected time.
+    \begin{itemize}
+      \item 10 of the 13 are out-of-AV $\nu$ with at most 16 $\nu$ hits, so there is little or no light.
+      \item 3 are in-AV $\nu$ whose event has no beam-time flash in \code{opflash\_table}: the only flashes are at $-59$ and 3404\,$\mu$s, and one is 1.1\,$\mu$s early.
+    \end{itemize}
+  \end{itemize}
   \item \textbf{eight hit panels}: Truth ($\nu$ = red), Pandora ($\nu$-slice hits), and the six foundation-model hit heads (frozen, 1\%, late light). Colour is $p(\nu)$ from blue (cosmic) to red ($\nu$). Each title gives that algorithm's per-event F1$_q$. Dashed boxes mark the 1--99\% extent of the true $\nu$ hits in each plane.
 \end{itemize}
-The hit panels are shown for every event, not only the T1 selection, so the event-level predictions can be compared with how each backbone separates $\nu$ from cosmic charge in the same event. The hit probabilities come from re-running the frozen 1\% T1 heads on these 80 events (batch 4 instead of 32, bf16). The per-event F1$_q$ agrees with the original test predictions to within 0.01 for the qlfm models and FM4NPP, 0.03 for PoLAr-MAE and 0.06 for Panda.
+The hit panels are shown for every event, not only the T1 selection, so the event-level predictions can be compared with how each backbone separates $\nu$ from cosmic charge in the same event. The hit probabilities come from re-running the frozen 1\% T1 heads on these 120 events (batch 4 instead of 32, bf16). The per-event F1$_q$ agrees with the original test predictions to within 0.01 for the qlfm models and FM4NPP, 0.03 for PoLAr-MAE and 0.06 for Panda.
 
 %=====================================================================
 \section{Discussion}
@@ -490,7 +540,7 @@ The hit panels are shown for every event, not only the T1 selection, so the even
 \item \textbf{Versus the open-data reconstruction.}
   \begin{itemize}
     \item Every foundation model with light beats Pandora's direct \code{nu\_score} on T2 by a wide margin (0.94--0.999 vs 0.83).
-    \item On per-hit T1, only qlfm-M (all modes), qlfm-S CL (fine-tuned) and Panda (frozen, $\geq$1\% labels) beat Pandora's $\nu$ slice.
+    \item On per-hit T1, only qlfm-M (all modes), qlfm-S CL (fine-tuned) and Panda (frozen at $\geq$1\% labels; fine-tuned: 0.656 and 0.823) beat Pandora's $\nu$ slice.
     \item Pandora+BDT is the tougher reference. Its 40 reconstruction features are very label-efficient but saturate early.
     \item The BDT's own gain from light (+0.02--0.03 AUC on T2) shows light still carries information after reconstruction.
   \end{itemize}
@@ -506,14 +556,20 @@ The hit panels are shown for every event, not only the T1 selection, so the even
     \item PoLAr-MAE: plausible limits are coarse 4\,cm groups along long cosmic tracks.
   \end{itemize}
 \item \textbf{qlfm-SD} gives poor per-hit and mediocre event features at this budget. Likely causes are the low learning rate, the drift-window crops, and dropping masked tokens without a mask token. A tuned qlfm-SD is a candidate for round~3.
-\item \textbf{Fine-tuning at 0.1\% labels} (a few hundred events) is unstable for several backbones, e.g.\ FM4NPP T2 0.63 and qlfm-S C 0.66. Frozen probes are the more reliable low-label mode.
+\item \textbf{Fine-tuning at 0.1\% labels} (a few hundred events) is unstable for several backbones, e.g.\ FM4NPP T2 0.63, qlfm-S C 0.66 and Panda 0.83. Frozen probes are the more reliable low-label mode.
 \end{itemize}
 
 %=====================================================================
 \section{Limitations and caveats}\label{sec:caveats}
 %=====================================================================
 \begin{itemize}[leftmargin=*]
-\item \textbf{Panda ``fine-tune'' is head-only.} The downstream Panda backbone is the \code{pimm} Sonata teacher, whose parameters \code{pimm} sets to \code{requires\_grad=False}. The ``FT'' runs therefore trained the same 2.30M head parameters as the frozen runs, with the fine-tune learning rate. These entries (\pft) do not measure Panda fine-tuning. The frozen Panda results are unaffected.
+\item \textbf{Panda fine-tune was re-run (\pft).} The downstream Panda backbone is the \code{pimm} Sonata teacher, whose parameters \code{pimm} sets to \code{requires\_grad=False}.
+  \begin{itemize}
+    \item The first fine-tune runs therefore trained only the 2.30M head parameters.
+    \item The backbone is now explicitly made trainable (20.6M + head). All 8 runs were repeated with the same protocol and gradient accumulation $8\times4$; all reached the full step count.
+    \item The tables show the re-run. The head-only results were 0.937/0.974 (T2), 0.492/0.642 (T3), 0.476/0.341 (T4) and 0.381/0.653 (T1) at 0.1\%/1\%.
+    \item True fine-tuning helps Panda most on hits (T1 0.656/0.823 vs frozen 0.536/0.715) and on flavor at 1\% (0.690 vs 0.679). Like the other backbones, it is unstable for T2 at 0.1\% (0.830).
+  \end{itemize}
 \item \textbf{PoLAr-MAE fine-tuning} also counts the MAE decoder as trainable. The decoder gets no gradient, so this inflates only the parameter count. Encoder drop-path (0.25) is active during fine-tuning.
 \item \textbf{Five runs hit the time limit before 3{,}000 steps}: FM4NPP T1 FT 1\% (1{,}800 steps), FM4NPP T1 C-only (1{,}500), and PoLAr-MAE FT 1\% on T1, T2 and T3 (2{,}400--2{,}700). Fine-tuned heavy backbones may be under-trained in general.
 \item \textbf{Gradient accumulation} ($4\times8$) was used where memory required it. The optimizer batch is always 32.
@@ -540,7 +596,7 @@ The hit panels are shown for every event, not only the T1 selection, so the even
     \item \code{scripts/infer\_hits.py} via \code{scripts/pbs/infer\_hits.pbs} (per-hit inference);
     \item \code{scripts/r2\_event\_displays.py} (rendering).
   \end{itemize}
-\item Compute: 37.6 node-hours for round 2 (\code{docs/figures/round2\_node\_hours.md}), plus about 0.1 for the display inference.
+\item Compute: 37.6 node-hours for the comparison, plus 1.1 for the display inference and the Panda fine-tune re-run, 38.7 in total (\code{docs/figures/round2\_node\_hours.md}).
 \end{itemize}
 
 \begin{thebibliography}{99}\small
@@ -556,7 +612,7 @@ The hit panels are shown for every event, not only the T1 selection, so the even
 \appendix
 \newgeometry{margin=0.8cm,bottom=1.2cm}
 \section{Event displays}\label{app:displays}
-One page per selected event: for each task, 10 easy events (most algorithms correct) followed by 10 hard events (fewest correct). The selection rules are in Sec.~\ref{sec:displays}. Hit panels use the frozen 1\% T1 heads of every foundation model, regardless of the task the event was selected for.
+One page per selected event: for each task, 10 easy events (most algorithms correct), then 10 boundary events (about half correct), then 10 hard events (fewest correct). The selection rules are in Sec.~\ref{sec:displays}. Hit panels use the frozen 1\% T1 heads of every foundation model, regardless of the task the event was selected for.
 \input{displays.tex}
 \restoregeometry
 \end{document}

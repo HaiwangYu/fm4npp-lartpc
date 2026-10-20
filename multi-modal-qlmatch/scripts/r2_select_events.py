@@ -5,7 +5,8 @@ Algorithms: 6 foundation models (frozen @ 1 % labels, seed 0, late light) + Pand
 (for T1: Pandora nu-slice hits). Per-event correctness:
   T2/T3: predicted class == truth;  T4: |E_pred/E_true - 1| < 0.2;  T1: per-event charge-weighted F1 >= 0.8.
 T1 hard = 5 worst overall (all have a tiny nu charge fraction) + 5 worst with nu charge fraction >= 5 %.
-easy = most algorithms correct, hard = fewest correct; picks are spread over truth classes (T4: energy bins).
+easy = most algorithms correct, hard = fewest correct, boundary = about half correct (4 of 8; T1: 3-4 of 7, random
+order); picks are spread over truth classes (T4: energy bins).
 
 Usage: r2_select_events.py OUT.json
 """
@@ -70,6 +71,7 @@ def pick(order, cls, n, rng):
 
 def main():
     rng = np.random.default_rng(0)
+    rng_b = np.random.default_rng(1)          # boundary picks (separate stream: easy/hard picks unchanged)
     pnd = np.load(f"{W}/round2/displays/pandora_event_preds.npz")
     sel = {}
     for task in ("evt_nu", "flavor", "energy"):
@@ -80,10 +82,13 @@ def main():
         cls = y if task != "energy" else np.digitize(np.exp(y), [0.7, 1.5])     # E bins (GeV)
         easy = pick(list(np.argsort(-(n_ok + jitter))), cls, N_PICK, rng)
         hard = pick(list(np.argsort(n_ok + jitter)), cls, N_PICK, rng)
+        mid = [int(i) for i in rng_b.permutation(len(g)) if n_ok[i] == len(algs) // 2]
+        bound = pick(mid, cls, N_PICK, rng_b)
         sel[task] = [dict(gidx=int(g[i]), kind=kind, n_correct=int(n_ok[i]), n_alg=len(algs), truth=float(y[i]),
                           preds={a: float(preds[a][i]) for a in algs})
-                     for kind, idx in (("easy", easy), ("hard", hard)) for i in idx]
-        print(task, "n_correct easy", [int(n_ok[i]) for i in easy], "hard", [int(n_ok[i]) for i in hard])
+                     for kind, idx in (("easy", easy), ("boundary", bound), ("hard", hard)) for i in idx]
+        print(task, "n_correct easy", [int(n_ok[i]) for i in easy], "boundary", [int(n_ok[i]) for i in bound],
+              "hard", [int(n_ok[i]) for i in hard])
     g, f1 = hit_level()
     nu_frac = f1.pop("_nu_frac")
     algs = list(f1)
@@ -94,10 +99,12 @@ def main():
     # the worst events overall are those with a tiny nu charge fraction; show 5 of them + 5 typical-fraction failures
     hard = order_h[:N_PICK // 2] + [i for i in order_h if nu_frac[i] >= 0.05][:N_PICK - N_PICK // 2]
     easy = order_e[:N_PICK]
+    bound = [int(i) for i in rng_b.permutation(len(g)) if n_ok[i] in (len(algs) // 2, len(algs) // 2 + 1)][:N_PICK]
     sel["hit"] = [dict(gidx=int(g[i]), kind=kind, n_correct=int(n_ok[i]), n_alg=len(algs), nu_frac=float(nu_frac[i]),
                        preds={a: float(f1[a][i]) for a in algs})
-                  for kind, idx in (("easy", easy), ("hard", hard)) for i in idx]
-    print("hit n_correct easy", [int(n_ok[i]) for i in easy], "hard", [int(n_ok[i]) for i in hard],
+                  for kind, idx in (("easy", easy), ("boundary", bound), ("hard", hard)) for i in idx]
+    print("hit n_correct easy", [int(n_ok[i]) for i in easy], "boundary", [int(n_ok[i]) for i in bound],
+          "hard", [int(n_ok[i]) for i in hard],
           "hard nu_frac", [round(float(nu_frac[i]), 3) for i in hard])
     json.dump(sel, open(sys.argv[1], "w"), indent=1)
     allg = sorted({e["gidx"] for v in sel.values() for e in v})

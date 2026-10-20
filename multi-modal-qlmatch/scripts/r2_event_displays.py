@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Round-2 event displays: one page per selected event (scripts/r2_select_events.py).
 
-Panels: TPC charge (global channel U|V|Y vs tick, colour = log10 hit integral), BEE-style PMT view (circle area ~ PE of
-the beam flash at each PMT's (z, y)), then the per-hit nu/cosmic separation of Truth, Pandora (nu-slice hits) and the
+Panels: TPC charge (global channel U|V|Y vs tick, colour = log10 hit integral), BEE-style PMT view (circle area ~ PE at
+each PMT's (z, y) of the optical flash matched to the true neutrino time, read from the open-data opflash tables), then the per-hit nu/cosmic separation of Truth, Pandora (nu-slice hits) and the
 6 frozen@1% foundation-model hit heads (scripts/infer_hits.py), colour = p(nu).
 
 Usage: r2_event_displays.py SELECTION.json HITS_DIR OUT_DIR
@@ -19,6 +19,7 @@ import numpy as np
 from matplotlib.patches import Rectangle
 
 from qlfm.data.dataset import Corpus
+from qlfm.data.h5reader import OpenSampleFile
 from qlfm.geometry import AV, N_WIRES, PMT_YZ
 
 W = "/lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc-work"
@@ -31,6 +32,34 @@ TASK_TITLE = {"hit": "T1 hit ν/cosmic", "evt_nu": "T2 event ν-presence", "flav
 CH0 = np.array([0, N_WIRES[0], N_WIRES[0] + N_WIRES[1]])
 NCH = sum(N_WIRES)
 HIT_NU_EDEP_MEV = 0.05
+# Reconstructed flash time minus true interaction time (event_table nu_vtx_wire_time, ns): median 0.478 us,
+# 5-95 % range 0.457-0.506 us, over all visible in-AV nu events with a beam flash (largest flash). Used to pick the
+# flash belonging to the nu interaction; without a truth time, the flash closest to the beam-flash median time.
+# If no flash lies within MATCH_TOL_US, the optical hits within OPH_WIN_US of the reference time are summed per PMT.
+FLASH_DT_US = 0.478
+BEAM_FLASH_T_US = 4.56
+MATCH_TOL_US = 1.0
+OPH_WIN_US = (-0.5, 3.5)        # fallback without a matched flash: sum optical hits in t_ref + this window
+_H5 = {}
+
+
+def flashes(sh, j):
+    """All optical flashes of event j of shard sh: list of (time us, total PE, per-PMT PE[32])."""
+    src = sh.meta["source"]
+    if src not in _H5:
+        _H5[src] = OpenSampleFile(src)
+    f, e = _H5[src], sh.meta["ev_lo"] + j
+    if f.offsets("opflash_table")[1][e] == 0:
+        return []
+    fl, _ = f.read_range("opflash_table", e, e + 1, ["flash_id", "time", "totalpe"])
+    sp, _ = f.read_range("opflashsumpe_table", e, e + 1, ["flash_id", "pmt_channel", "sumpe"])
+    out = []
+    for fid, t, pe in zip(fl["flash_id"], fl["time"], fl["totalpe"]):
+        m = sp["flash_id"] == fid
+        v = np.zeros(32)
+        v[sp["pmt_channel"][m].astype(int)] = sp["sumpe"][m]
+        out.append((float(t), float(pe), v))
+    return out
 
 
 def load_event(c, g):
@@ -43,7 +72,8 @@ def load_event(c, g):
     e["tick"] = e["time"].astype(np.float32) / 8
     e.update({"oph_" + k: np.asarray(sh.oph(k)[o0:o0 + on]) for k in ("ch", "t", "pe")})
     e.update({k: np.asarray(sh.ev(k)[j]) for k in ("fl_pmt", "fl_t", "fl_pe", "fl_n", "nu_vtx", "nu_pdg", "is_cc",
-                                                    "nu_energy", "run", "subrun", "event")})
+                                                    "nu_energy", "nu_time", "run", "subrun", "event")})
+    e["flashes"] = flashes(sh, j)
     return e
 
 
@@ -90,12 +120,23 @@ def nu_boxes(ax, e, tgt):
         ax.add_patch(Rectangle((x0 - 15, y0 - 40), x1 - x0 + 30, y1 - y0 + 80, fill=False, ls="--", lw=0.5, color="k"))
 
 
+def matched_flash(e):
+    """(flash or None, reference time, label): the flash closest to t_nu + FLASH_DT_US (truth), else to the beam time."""
+    has_t = np.isfinite(e["nu_time"]) and e["nu_time"] > 0
+    t_ref = float(e["nu_time"]) / 1000 + FLASH_DT_US if has_t else BEAM_FLASH_T_US
+    if not e["flashes"]:
+        return None, t_ref, has_t
+    best = min(e["flashes"], key=lambda fl: abs(fl[0] - t_ref))
+    return (best if abs(best[0] - t_ref) < MATCH_TOL_US else None), t_ref, has_t
+
+
 def light_panel(ax, e):
-    pe = e["fl_pmt"].astype(np.float64)
-    src = "largest beam flash"
-    if e["fl_n"] == 0 or pe.sum() <= 0:
-        pe = np.bincount(e["oph_ch"].astype(int), weights=e["oph_pe"], minlength=32)[:32]
-        src = "all ophits in window"
+    fl, t_ref, has_t = matched_flash(e)
+    if fl is not None:
+        pe = fl[2]
+    else:
+        w = (e["oph_t"] >= t_ref + OPH_WIN_US[0]) & (e["oph_t"] < t_ref + OPH_WIN_US[1])
+        pe = np.bincount(e["oph_ch"][w].astype(int), weights=e["oph_pe"][w], minlength=32)[:32].astype(np.float64)
     ax.add_patch(Rectangle((AV["z"][0], AV["y"][0]), AV["z"][1] - AV["z"][0], AV["y"][1] - AV["y"][0],
                            fill=False, lw=0.6, color="0.4"))
     z, y = PMT_YZ[:, 1], PMT_YZ[:, 0]
@@ -113,10 +154,16 @@ def light_panel(ax, e):
     ax.set_xlabel("z [cm]", fontsize=6, labelpad=1)
     ax.set_ylabel("y [cm]", fontsize=6, labelpad=1)
     ax.tick_params(labelsize=5, length=2, pad=1)
-    t = f"PMT view ({src}): {pe.sum():.0f} PE"
-    if e["fl_n"] > 0:
-        t += f", t = {float(e['fl_t']):.2f} µs"
-    ax.set_title(t, fontsize=7, pad=2)
+    ref = f"t_ν + {FLASH_DT_US:.2f} µs = {t_ref:.2f} µs" if has_t else f"beam time {t_ref:.2f} µs"
+    nfl = len(e["flashes"])
+    if fl is None:
+        t = (f"PMT view: no reco flash within {MATCH_TOL_US:.0f} µs of {ref} ({nfl} flash{'es' if nfl != 1 else ''});\n"
+             f"optical hits in [{t_ref + OPH_WIN_US[0]:.2f}, {t_ref + OPH_WIN_US[1]:.2f}] µs: {pe.sum():.0f} PE")
+    else:
+        largest = max(e["flashes"], key=lambda f: f[1])[0] == fl[0]
+        t = (f"PMT view: flash at {fl[0]:.2f} µs, {fl[1]:.0f} PE (matched to {ref});\n"
+             f"{nfl} flash{'es' if nfl != 1 else ''} in event, matched = {'largest' if largest else 'NOT the largest'}")
+    ax.set_title(t, fontsize=6.5, pad=2)
 
 
 def fmt_pred(task, v, truth):
@@ -130,7 +177,8 @@ def header(task, item, e, k):
     nu = "no ν" if e["nu_pdg"] == 0 else (f"{'ν' if e['nu_pdg'] > 0 else 'ν̄'}"
                                            f"{ {12: 'e', 14: 'μ'}.get(abs(int(e['nu_pdg'])), '?') } "
                                            f"{'CC' if e['is_cc'] else 'NC'}, E = {float(e['nu_energy']):.2f} GeV, "
-                                           f"vtx = ({e['nu_vtx'][0]:.0f}, {e['nu_vtx'][1]:.0f}, {e['nu_vtx'][2]:.0f}) cm")
+                                           f"vtx = ({e['nu_vtx'][0]:.0f}, {e['nu_vtx'][1]:.0f}, {e['nu_vtx'][2]:.0f}) cm, "
+                                           f"t_ν = {float(e['nu_time']) / 1000:.2f} µs")
     l1 = (f"{TASK_TITLE[task]} — {item['kind']} #{k + 1}   (correct: {item['n_correct']}/{item['n_alg']})    "
           f"run {int(e['run'])} / subrun {int(e['subrun'])} / event {int(e['event'])}  [gidx {item['gidx']}]")
     l2 = f"Truth: {nu}"
@@ -202,7 +250,7 @@ def main():
     for task, items in sel.items():
         if only and task not in only:
             continue
-        cnt = {"easy": 0, "hard": 0}
+        cnt = {"easy": 0, "boundary": 0, "hard": 0}
         for item in items:
             k = cnt[item["kind"]]
             cnt[item["kind"]] += 1

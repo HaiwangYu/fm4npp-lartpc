@@ -25,4 +25,11 @@
 | 7758050 | qs_r2p_2 | debug-scaling | 4 | 00:54:50 | 3.66 |
 | 7758061 | q_r2p_3 | debug | 1 | 00:00:02 | 0.00 |
 
-total node-h: 37.62
+| 7762889 | r2_infer_hits | debug | 1 | 00:01:39 | 0.03 |
+| 7763028 | r2_infer_hits | debug | 1 | 00:01:41 | 0.03 |
+| 7762999 | panda_ft_2 | debug-scaling | 1 | 00:48:53 | 0.81 |
+| 7763047 | panda_ft_3 | debug | 1 | 00:14:04 | 0.23 |
+| 7763057 | panda_ft_5 | debug | 1 | 00:00:01 | 0.00 |
+| 7763070 | panda_ft_4 | debug-scaling | 1 | 00:00:01 | 0.00 |
+
+total node-h: 37.62 (comparison) + 1.10 (2026-10-20: display inference, Panda fine-tune re-run) = 38.72

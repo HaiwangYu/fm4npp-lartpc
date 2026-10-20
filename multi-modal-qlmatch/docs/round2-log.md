@@ -74,3 +74,21 @@ Plan: `docs/plan-round2.md`. Survey: `docs/round2-survey.md`. Tracking: GitHub i
   - **Gradient accumulation was used only where needed**, not "all Panda modes".
   - **Pandora references were scored on a 20k superset** of the neural 10k test subset.
 - **Re-inferred per-event F1 agrees with the original test predictions** within 0.01 (qlfm, FM4NPP), 0.03 (PoLAr-MAE) and 0.06 (Panda).
+
+## 2026-10-20 (later): review follow-ups
+- **Light panel.** The truth ν interaction time is in `event_table/nu_vtx_wire_time`: ns, 3.125–4.725 µs, i.e. the BNB spill; it is uncorrelated with drift x.
+  - The reconstructed flash lags it by 0.478 µs (5–95%: 0.457–0.506 µs).
+  - Displays now show the flash (from `opflash_table` / `opflashsumpe_table`) closest to t_ν + 0.478 µs, within 1 µs.
+  - Without a matched flash, the panel sums optical hits in [−0.5, +3.5] µs around that time.
+  - Fallback without a truth time: the typical beam-flash time (4.56 µs), not t = 0, because beam flashes sit at about 3.6–5.2 µs.
+- **Boundary category.** 10 events per task with exactly half of the algorithms correct, giving 120 displays in total.
+  - Per-algorithm accuracy on all boundary-type test events is added to the note.
+  - Hit inference for the new events: job 7763028.
+- **T4 definition clarified.** The target is the true incoming E_ν (CC, fiducial, visible), not the deposited energy.
+  - Collection-plane MC deposit / E_ν: median 0.47.
+  - An oracle log-linear calibration of that true deposit gives resolution 0.36, against 0.28 for qlfm-M.
+- **Panda fine-tune re-run with a trainable backbone.** `PandaBackbone` now calls `requires_grad_(True)`. `train_downstream --resume` was added, but no run needed it.
+  - Jobs 7762999 and 7763047; 1.05 node-hours.
+  - Head-only results are kept under `r2p/panda/*/finetune_headonly`.
+  - New FT 0.1% / 1%: T2 0.830 / 0.968, T3 0.506 / 0.690, T4 0.484 / 0.358, T1 0.656 / 0.823.
+- **Incident:** a qsub with `-o` pointing to a missing directory was held after 21 failed starts. Fix: create the directory first.

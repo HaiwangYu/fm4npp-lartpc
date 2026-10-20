@@ -10,7 +10,7 @@
 source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
 cd $QLFM_ROOT
 D=$QLFM_WORK/round2/displays
-G=$D/selection_gidx.npy
+G=${G:-$D/selection_gidx.npy}
 run() {  # gpu python backbone
   CUDA_VISIBLE_DEVICES=$1 PIMM_ROOT=$QLFM_WORK/tools/pimm $2 scripts/infer_hits.py $QLFM_WORK/r2p/$3/hit/frozen/f0.01_s0 $G $D/hits/$3.npz > $D/hits/$3.log 2>&1
 }

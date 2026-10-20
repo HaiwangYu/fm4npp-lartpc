@@ -65,6 +65,7 @@ class PandaBackbone(nn.Module):
         if ckpt:
             _load_state(sonata, ckpt)
         self.backbone = sonata.teacher.backbone if ckpt else sonata.student.backbone
+        self.backbone.requires_grad_(True)       # pimm freezes the EMA teacher; fine-tuning must train it
         self.up_cast_level = cfg.model.up_cast_level
         self.grid = 0.3 / SCALE
         ch = cfg.model.backbone.enc_channels

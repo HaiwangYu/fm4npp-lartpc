@@ -10,7 +10,7 @@ sel, img, out = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
 lines = []
 for i, task in enumerate(("hit", "evt_nu", "flavor", "energy")):
     lines.append(("" if i == 0 else "\\clearpage") + f"\\subsection{{{TITLE[task]}}}")
-    cnt = {"easy": 0, "hard": 0}
+    cnt = {"easy": 0, "boundary": 0, "hard": 0}
     for it in sel[task]:
         cnt[it["kind"]] += 1
         name = f"{task}_{it['kind']}{cnt[it['kind']]:02d}"

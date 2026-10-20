@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Agreement statistics behind the round-2 easy/hard event selection (same correctness rules as r2_select_events.py).
 
-Writes OUT.json (per task: histogram of #algorithms correct, per-algorithm accuracy on the consensus-hard events,
+Writes OUT.json (per task: histogram of #algorithms correct, per-algorithm accuracy overall, on the consensus-hard
+events and on the boundary events (about half of the algorithms correct),
 dominant (truth -> majority prediction) patterns among them) and OUT.png (histograms).
 Usage: r2_agreement.py OUT_PREFIX
 """
@@ -31,7 +32,9 @@ def main():
         hard = n_ok <= 1
         d = dict(n_alg=len(algs), n_events=len(g), hist=np.bincount(n_ok, minlength=len(algs) + 1).tolist(),
                  acc={a: float(correct[a].mean()) for a in algs},
-                 acc_on_hard={a: float(correct[a][hard].mean()) for a in algs})
+                 acc_on_hard={a: float(correct[a][hard].mean()) for a in algs},
+                 n_boundary=int((n_ok == len(algs) // 2).sum()),
+                 acc_on_boundary={a: float(correct[a][n_ok == len(algs) // 2].mean()) for a in algs})
         if task != "energy":
             fm = np.stack([preds[a] for a in algs if not a.startswith("pandora")]).astype(int)
             maj = np.array([np.bincount(c, minlength=3).argmax() for c in fm.T])
@@ -53,8 +56,10 @@ def main():
     ok = {a: f1[a] >= 0.8 for a in algs}
     n_ok = sum(ok[a].astype(int) for a in algs)
     hard = n_ok == 0
+    bnd = (n_ok == 3) | (n_ok == 4)
     out["hit"] = dict(n_alg=len(algs), n_events=len(g), hist=np.bincount(n_ok, minlength=len(algs) + 1).tolist(),
                       acc={a: float(ok[a].mean()) for a in algs}, median_f1={a: float(np.median(f1[a])) for a in algs},
+                      n_boundary=int(bnd.sum()), acc_on_boundary={a: float(ok[a][bnd].mean()) for a in algs},
                       hard_nu_frac_quantiles=np.quantile(nu_frac[hard], [0.1, 0.5, 0.9]).tolist(),
                       all_nu_frac_quantiles=np.quantile(nu_frac, [0.1, 0.5, 0.9]).tolist())
     print("hit", out["hit"]["hist"])

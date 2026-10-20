@@ -44,6 +44,8 @@ def get_args(argv=None):
     ap.add_argument("--n-test", type=int, default=20000)
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--time-limit", type=float, default=50.0)
+    ap.add_argument("--resume", type=int, default=0,
+                    help="at the time limit save OUT/state.pt and exit without testing; a later call resumes from it")
     ap.add_argument("--layer-decay", type=float, default=0.75)
     # architecture (scratch); for pretrained models these come from the checkpoint
     ap.add_argument("--d", type=int, default=256)
@@ -210,6 +212,13 @@ def main(argv=None):
 
     best, best_step, step, logs = -1e9, 0, 0, []
     ck = os.path.join(args.out, "best.pt")
+    st = os.path.join(args.out, "state.pt")
+    if args.resume and os.path.exists(st):
+        s = torch.load(st, map_location=dev, weights_only=False)
+        model.load_state_dict(s["model"])
+        opt.load_state_dict(s["opt"])
+        step, best, best_step, logs = s["step"], s["best"], s["best_step"], s["logs"]
+        print(f"resumed at step {step}", flush=True)
     model.train()
     if args.mode in ("frozen", "linear"):
         backbone.eval()
@@ -244,6 +253,11 @@ def main(argv=None):
                     torch.save({k: v for k, v in model.state_dict().items()
                                 if args.mode not in ("frozen", "linear") or not k.startswith("backbone.") or "adapter_" in k}, ck)
             if step >= steps or (time.time() - t0) / 60 > args.time_limit:
+                if args.resume and step < steps:
+                    torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=step, best=best,
+                                    best_step=best_step, logs=logs), st)
+                    print(f"time limit at step {step}/{steps}: state saved, exiting for resume", flush=True)
+                    return
                 done = True
                 break
     sd = torch.load(ck, map_location=dev)

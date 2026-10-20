@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-Round 2 compared our charge+light MAE foundation model (qlfm) against the reconstruction in the MicroBooNE open data (Pandora) and against four published foundation-model recipes. All are adapted to our data and given equal pretraining node-hours, and evaluated with identical heads, late-fused light, label budgets and test subsets. Round 2 used **37.6 node-hours** of the 50 budgeted.
+Round 2 compared our charge+light MAE foundation model (qlfm) against the reconstruction in the MicroBooNE open data (Pandora) and against four published foundation-model recipes. All are adapted to our data and given equal pretraining node-hours, and evaluated with identical heads, late-fused light, label budgets and test subsets. Round 2 used **37.6 node-hours** of the 50 budgeted for the comparison, plus 1.1 for the event-display inference and the Panda fine-tune re-run (38.7 in total).
 
 1. **qlfm-M (multi-modal MAE, 21M) is the best model on all four tasks once ≥1% of labels (about 3–7k events) are available.** With a frozen backbone at 1% / 10% labels:
 
@@ -33,6 +33,10 @@ Round 2 compared our charge+light MAE foundation model (qlfm) against the recons
 ## 2. What was compared
 
 All methods use the same data, splits, tasks, metrics and test subsets as round 1. The tasks are T1 hit ν/cosmic, T2 event ν/cosmic (3-class; headline AUC is in-AV ν vs no-ν), T3 flavor and T4 energy.
+
+**What T4 regresses.** The target is the **true incoming neutrino energy E_ν** (generator truth, `event_table/nu_energy`), for CC events with a visible ν and a fiducial vertex. It is *not* the deposited energy.
+- The ν's MC energy deposited on collection-plane hits is a median 47% of E_ν (44% νμCC, 57% νeCC).
+- A log-linear calibration of that true deposit to E_ν gives a resolution of only 0.36. The best models reach 0.28, so they also use topology, not just calorimetry.
 
 ### 2.1 Reconstruction already in the open data (Pandora)
 - **Pandora direct.** Untrained Pandora outputs from the HDF5 files:
@@ -96,14 +100,14 @@ None of the four methods has seen 2D wire hits, real cosmic data or LArTPC light
 | **qlfm-M CL (MAE, 21M)** | **0.986** | **0.999** | **0.999** | **0.985** | **0.998** | 0.999 |
 | qlfm-S CL (MAE, 6.6M) | 0.953 | 0.970 | 0.974 | 0.953 | 0.990 | 0.972 |
 | qlfm-S C (MAE, 6.6M) | 0.943 | 0.960 | 0.962 | 0.664 | 0.956 | 0.666 |
-| Panda (21M) | 0.938 | 0.978 | 0.984 | 0.937† | 0.974† | 0.914 |
+| Panda (21M) | 0.938 | 0.978 | 0.984 | 0.830† | 0.968† | 0.914 |
 | PoLAr-MAE (22M) | 0.950 | 0.962 | 0.963 | 0.920 | 0.964 | 0.660 |
 | FM4NPP (4.9M) | 0.943 | 0.961 | 0.963 | 0.626 | 0.944 | 0.712 |
 | qlfm-SD CL / C (21M) | 0.949 / 0.942 | 0.959 / 0.957 | 0.959 / 0.957 | 0.940 / 0.690 | 0.959 / 0.952 | 0.605 / 0.609 |
 | Pandora + BDT C / + light | 0.926 / 0.957 | 0.949 / 0.976 | 0.955 / 0.983 | | | |
 | Pandora direct (`nu_score`) | 0.826 | | | | | |
 
-*† Panda "FT" is head-only training (see §5). "Charge-only diag" drops the late-fused light. qlfm-CL backbones still contain light internally, so for them it is not charge-only.*
+*† Panda FT: re-run with a trainable backbone (see §5). "Charge-only diag" drops the late-fused light. qlfm-CL backbones still contain light internally, so for them it is not charge-only.*
 
 ### 3.2 T3: flavor νμCC / νeCC / NC (macro-F1)
 
@@ -112,7 +116,7 @@ None of the four methods has seen 2D wire hits, real cosmic data or LArTPC light
 | **qlfm-M CL** | 0.531 | **0.713** | **0.755** | **0.640** | **0.724** | 0.709 |
 | qlfm-S CL | 0.416 | 0.624 | 0.642 | 0.512 | 0.622 | 0.625 |
 | qlfm-S C | 0.457 | 0.509 | 0.520 | 0.389 | 0.469 | 0.429 |
-| Panda | 0.465 | 0.679 | 0.734 | 0.492† | 0.642† | 0.666 |
+| Panda | 0.465 | 0.679 | 0.734 | 0.506† | 0.690† | 0.666 |
 | PoLAr-MAE | 0.446 | 0.554 | 0.570 | 0.411 | 0.563 | 0.497 |
 | FM4NPP | 0.445 | 0.546 | 0.557 | 0.355 | 0.485 | 0.507 |
 | qlfm-SD CL / C | 0.389 / 0.369 | 0.450 / 0.437 | 0.423 / 0.439 | 0.316 / 0.314 | 0.382 / 0.274 | 0.297 / 0.303 |
@@ -126,7 +130,7 @@ None of the four methods has seen 2D wire hits, real cosmic data or LArTPC light
 | **qlfm-M CL** | 0.418 | **0.284** | **0.276** | **0.385** | **0.303** | 0.284 |
 | qlfm-S CL | 0.465 | 0.354 | 0.333 | 0.411 | 0.318 | 0.345 |
 | qlfm-S C | 0.484 | 0.378 | 0.378 | 0.563 | 0.412 | 0.441 |
-| Panda | 0.496 | 0.343 | 0.302 | 0.476† | 0.341† | 0.423 |
+| Panda | 0.496 | 0.343 | 0.302 | 0.484† | 0.358† | 0.423 |
 | PoLAr-MAE | 0.469 | 0.389 | 0.381 | 0.566 | 0.379 | 0.421 |
 | FM4NPP | 0.454 | 0.369 | 0.358 | 0.567 | 0.334 | 0.420 |
 | qlfm-SD CL / C | 0.483 / 0.475 | 0.367 / 0.391 | 0.370 / 0.387 | 0.469 / 0.477 | 0.415 / 0.426 | 0.439 / 0.454 |
@@ -140,7 +144,7 @@ None of the four methods has seen 2D wire hits, real cosmic data or LArTPC light
 | **qlfm-M CL** | **0.868** | **0.892** | **0.894** | **0.905** | **0.947** | 0.891 |
 | qlfm-S CL | 0.502 | 0.685 | 0.685 | 0.783 | 0.902 | 0.675 |
 | qlfm-S C | 0.080 | 0.429 | 0.440 | 0.008 | 0.828 | 0.170 |
-| Panda | 0.536 | 0.715 | 0.725 | 0.381† | 0.653† | 0.629 |
+| Panda | 0.536 | 0.715 | 0.725 | 0.656† | 0.823† | 0.629 |
 | PoLAr-MAE | 0.167 | 0.537 | 0.526 | 0.491 | 0.670 | 0.351 |
 | FM4NPP | 0.200 | 0.463 | 0.468 | 0.371 | 0.620 | 0.238 |
 | qlfm-SD CL / C | 0.010 / 0.032 | 0.141 / 0.147 | 0.116 / 0.122 | 0.001 / 0.001 | 0.818 / 0.657 | 0.000 / 0.004 |
@@ -150,7 +154,7 @@ None of the four methods has seen 2D wire hits, real cosmic data or LArTPC light
 
 - **Versus the open-data reconstruction.**
   - Every foundation model with light beats Pandora's direct `nu_score` on T2 by a wide margin (0.94–0.999 vs 0.83).
-  - On per-hit T1, only qlfm-M, qlfm-S-CL (fine-tuned) and Panda (from 1% labels) beat Pandora's ν-slice hits (0.63–0.65).
+  - On per-hit T1, only qlfm-M, qlfm-S-CL (fine-tuned) and Panda (frozen from 1% labels; fine-tuned 0.656 / 0.823) beat Pandora's ν-slice hits (0.63–0.65).
   - **Pandora + BDT is the tougher reference.**
     - Its low-dimensional reconstruction features are very label-efficient: at 0.1% labels it beats every *frozen* foundation model on flavor and energy.
     - It saturates early (flavor 0.66, energy 0.31 at 10%). qlfm-M overtakes it from 1% labels, or already at 0.1% when fine-tuned.
@@ -172,7 +176,10 @@ None of the four methods has seen 2D wire hits, real cosmic data or LArTPC light
 - **Fine-tuning at 0.1% labels** is unstable for several backbones (e.g. FM4NPP T2 FT 0.63, qlfm-S-C 0.66). That is a few hundred labelled events trained end to end. Frozen probes are the more reliable low-label mode here.
 
 ## 5. Limitations
-- **Panda "fine-tune" is head-only (†).** The downstream Panda backbone is the `pimm` Sonata teacher, and `pimm` sets every teacher parameter to `requires_grad=False`. The FT runs therefore trained the same 2.30M head parameters as the frozen runs, at the fine-tune learning rate. Frozen Panda results are unaffected.
+- **Panda fine-tune was re-run (†).** The downstream Panda backbone is the `pimm` Sonata teacher, which `pimm` freezes (`requires_grad=False`).
+  - The first FT runs therefore trained only the head: 0.937/0.974 (T2), 0.492/0.642 (T3), 0.476/0.341 (T4), 0.381/0.653 (T1) at 0.1%/1%.
+  - The backbone is now made trainable and all 8 runs were repeated; the tables show the re-run.
+  - Real fine-tuning helps Panda most on hits (0.656/0.823) and on flavor at 1% (0.690). T2 at 0.1% is unstable (0.830), as for other backbones.
 - **PoLAr-MAE FT counts the unused MAE decoder as trainable.** It gets no gradient, so only the parameter count is inflated. Encoder drop-path 0.25 is active during FT.
 - **Five runs stopped at the time limit before the 3,000-step cap:**
   - FM4NPP T1 FT 1% (1,800 steps) and T1 C-only (1,500).
