@@ -21,3 +21,8 @@ scratch/
 *.ckpt
 cache/
 hosts_*
+
+# round-2 tech-note build: event-display images are regenerated into the work dir (symlink) and the
+# compiled PDF is committed once, as docs/technote-round2.pdf
+multi-modal-qlmatch/docs/technote-round2-tex/displays
+multi-modal-qlmatch/docs/technote-round2-tex/technote-round2.pdf

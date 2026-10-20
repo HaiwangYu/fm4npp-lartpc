@@ -55,3 +55,22 @@ Plan: `docs/plan-round2.md`. Survey: `docs/round2-survey.md`. Tracking: GitHub i
 - The long-run slot rule now covers fine-tuning at ≥1% labels and accumulated runs at ≥1%.
 - All 224 R2P runs are complete. Results: `docs/figures/round2_comparison.{md,png}`. Tech note: `docs/technote-round2.md`.
 - Round-2 compute: **37.6 node-hours** (`docs/figures/round2_node_hours.md`).
+
+## 2026-10-20: round-2 PDF tech note with event displays
+- **Request:** a round-2-only PDF note with every algorithm's parameters, all metric comparisons, key findings, and event displays (10 easy + 10 hard events per task).
+- **Display settings** (agreed with the user): frozen @1% labels, seed 0, late light; panels Truth + Pandora + 6 FMs; charge in global channels.
+- **Pipeline:**
+  - `scripts/pandora_event_preds.py`: per-event Pandora direct and BDT predictions.
+  - `scripts/r2_select_events.py`: easy/hard selection.
+  - `scripts/r2_agreement.py`: agreement statistics.
+  - `scripts/infer_hits.py` via `scripts/pbs/infer_hits.pbs`: per-hit inference on the 80 events (job 7762889, about 0.1 node-hours).
+  - `scripts/r2_event_displays.py`: rendering.
+  - `scripts/r2_displays_tex.py`: LaTeX appendix.
+  - Output: `docs/technote-round2.pdf` (source `docs/technote-round2-tex/`).
+- **Parameter audit while writing the note.** These caveats are now recorded in both notes:
+  - **Panda "fine-tune" is head-only.** The `pimm` teacher backbone has `requires_grad=False`, so `n_trainable` is the same for FT and frozen.
+  - **PoLAr-MAE FT counts its unused decoder** as trainable.
+  - **Five FT/diagnostic runs stopped at the time limit** before 3,000 steps.
+  - **Gradient accumulation was used only where needed**, not "all Panda modes".
+  - **Pandora references were scored on a 20k superset** of the neural 10k test subset.
+- **Re-inferred per-event F1 agrees with the original test predictions** within 0.01 (qlfm, FM4NPP), 0.03 (PoLAr-MAE) and 0.06 (Panda).
