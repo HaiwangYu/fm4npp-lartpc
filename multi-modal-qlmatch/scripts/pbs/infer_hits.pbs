@@ -1,0 +1,22 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:eagle
+#PBS -N r2_infer_hits
+#PBS -j oe
+# Per-hit nu probabilities of the 6 frozen@1% hit models on the round-2 display events (scripts/infer_hits.py).
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+cd $QLFM_ROOT
+D=$QLFM_WORK/round2/displays
+G=${G:-$D/selection_gidx.npy}
+run() {  # gpu python backbone
+  CUDA_VISIBLE_DEVICES=$1 PIMM_ROOT=$QLFM_WORK/tools/pimm $2 scripts/infer_hits.py $QLFM_WORK/r2p/$3/hit/frozen/f0.01_s0 $G $D/hits/$3.npz > $D/hits/$3.log 2>&1
+}
+{ run 0 $PY qlfm_M_CL; run 0 $PY qlfm_SD_CL; } &
+{ run 1 $PY qlfm_S_CL; run 1 $QLFM_WORK/tools/venv-mamba/bin/python fm4npp; } &
+run 2 $QLFM_WORK/tools/pimm/.venv/bin/python panda &
+run 3 $QLFM_WORK/tools/pimm/.venv/bin/python polarmae &
+wait
+tail -n 2 $D/hits/*.log

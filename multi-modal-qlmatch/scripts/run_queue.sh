@@ -16,12 +16,18 @@ worker() {
       local left=$(( (DEADLINE - $(/bin/date +%s)) / 60 - 3 ))
       [ $left -lt 10 ] && return
       # long runs (large label budgets, encoder trained) need a fresh slot
-      if [[ "$line" =~ --label-frac\ (1|0\.1)\  ]] && [[ ! "$line" =~ --mode\ (frozen|linear) ]] && [ $left -lt 40 ]; then continue; fi
+      if { { [[ "$line" =~ --label-frac\ (1|0\.1|0\.01)\  ]] && [[ ! "$line" =~ --mode\ (frozen|linear) ]]; } || { [[ "$line" =~ --accum\ [2-9] ]] && [[ "$line" =~ --label-frac\ (1|0\.1|0\.01)\  ]]; }; } && [ $left -lt 45 ]; then continue; fi
       mkdir -p $(dirname $out)
       mkdir $out.lock 2>/dev/null || continue
       mkdir -p $out
       echo "[$(hostname) gpu$gpu $(/bin/date +%T)] -> $out (${left} min left)"
-      CUDA_VISIBLE_DEVICES=$gpu timeout $((left*60)) $PY -m $line --time-limit $((left-5)) > $out/run.log 2>&1
+      # optional interpreter prefix: "@pimm " (pimm venv) or "@mamba " (mamba_ssm venv)
+      local py=$PY cmd=$line
+      case "$line" in
+        "@pimm "*)  py=$QLFM_WORK/tools/pimm/.venv/bin/python; cmd=${line#@pimm } ;;
+        "@mamba "*) py=$QLFM_WORK/tools/venv-mamba/bin/python; cmd=${line#@mamba } ;;
+      esac
+      CUDA_VISIBLE_DEVICES=$gpu PIMM_ROOT=$QLFM_WORK/tools/pimm timeout $((left*60)) $py -m $cmd --time-limit $((left-5)) > $out/run.log 2>&1
       rmdir $out.lock
       ran=1
     done < $TASKS

@@ -9,4 +9,4 @@ NN=$(wc -l < $PBS_NODEFILE)
 WALL=$(qstat -f $PBS_JOBID | awk -F'= ' '/Resource_List.walltime/{split($2,a,":"); print a[1]*60+a[2]}')
 TL=$(( WALL - 7 ))
 echo "nodes=$NN walltime_min=$WALL time_limit=$TL out=$OUT args=$ARGS"
-mpiexec -n $((NN*4)) --ppn 4 --cpu-bind depth -d 8 $PY -u -m qlfm.train_pretrain --out $OUT --time-limit $TL $ARGS 2>&1 | grep -v -E "Warn|bind: warning"
+mpiexec -n $((NN*4)) --ppn 4 --cpu-bind depth -d 8 ${PYBIN:-$PY} -u -m qlfm.train_pretrain --out $OUT --time-limit $TL $ARGS 2>&1 | grep -v -E "Warn|bind: warning"

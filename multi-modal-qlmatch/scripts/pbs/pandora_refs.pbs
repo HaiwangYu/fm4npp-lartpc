@@ -1,0 +1,12 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:40:00
+#PBS -l filesystems=home:eagle
+#PBS -N pnd_refs
+#PBS -j oe
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+export OMP_NUM_THREADS=32 OPENBLAS_NUM_THREADS=8
+cd $QLFM_ROOT
+$PY scripts/pandora_refs.py $QLFM_WORK/round2/pandora 2>&1 | grep -v -i warn

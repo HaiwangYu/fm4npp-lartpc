@@ -6,9 +6,14 @@ import torch.distributed as dist
 
 
 def init():
-    rank = int(os.environ.get("PMI_RANK", os.environ.get("RANK", 0)))
-    world = int(os.environ.get("PMI_SIZE", os.environ.get("WORLD_SIZE", 1)))
-    local = int(os.environ.get("PMI_LOCAL_RANK", os.environ.get("LOCAL_RANK", 0)))
+    if "TORCHELASTIC_RUN_ID" in os.environ or ("RANK" in os.environ and "WORLD_SIZE" in os.environ):
+        # torchrun: its RANK/WORLD_SIZE win over any PMI_* inherited from an outer mpiexec
+        rank, world = int(os.environ["RANK"]), int(os.environ["WORLD_SIZE"])
+        local = int(os.environ.get("LOCAL_RANK", 0))
+    else:
+        rank = int(os.environ.get("PMI_RANK", 0))
+        world = int(os.environ.get("PMI_SIZE", 1))
+        local = int(os.environ.get("PMI_LOCAL_RANK", 0))
     if world > 1:
         if "MASTER_ADDR" not in os.environ:
             nodefile = os.environ.get("PBS_NODEFILE")

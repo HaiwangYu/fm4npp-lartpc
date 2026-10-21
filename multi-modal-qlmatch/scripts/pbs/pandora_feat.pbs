@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:eagle
+#PBS -N pnd_feat
+#PBS -j oe
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+cd $QLFM_ROOT
+ls -d $QLFM_WORK/cache/bnb/*_p* $QLFM_WORK/cache/nue/*_p* | grep -v "\.log$" | \
+  xargs -P 30 -n 1 bash -c '[ -f $0/pnd_feat.npy ] || $PY -m qlfm.data.pandora_features $0' 
+ls $QLFM_WORK/cache/*/*/pnd_feat.npy | wc -l

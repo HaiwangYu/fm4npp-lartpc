@@ -41,15 +41,40 @@ class MeanLinear(nn.Module):
 
 
 class HitHead(nn.Module):
-    """Per-hit logit from the hit embedding and its token's contextual feature."""
+    """Per-hit logit from the hit embedding (if the backbone provides one), its token's contextual
+    feature, and (optionally) a per-event extra vector such as pooled late-fused light."""
 
-    def __init__(self, d, hit_dim=128, hidden=128):
+    def __init__(self, d, hit_dim=128, hidden=128, extra_dim=0):
         super().__init__()
         self.norm = nn.LayerNorm(d)
-        self.net = mlp([hit_dim + d, hidden, hidden, 1])
+        self.net = mlp([hit_dim + d + extra_dim, hidden, hidden, 1])
 
-    def forward(self, h_hit, z_tok, hit2tok):
+    def forward(self, h_hit, z_tok, hit2tok, extra=None):
         m = hit2tok >= 0
-        zt = self.norm(z_tok.float())[hit2tok.clamp(min=0)]
-        logit = self.net(torch.cat([h_hit.float(), zt], 1)).squeeze(1)
+        parts = [self.norm(z_tok.float())[hit2tok.clamp(min=0)]]
+        if h_hit is not None:
+            parts.insert(0, h_hit.float())
+        if extra is not None:
+            parts.append(extra.float())
+        logit = self.net(torch.cat(parts, 1)).squeeze(1)
         return torch.where(m, logit, torch.full_like(logit, -20.0))
+
+
+class LateLight(nn.Module):
+    """Late-fused PMT light, identical for every backbone: 32 per-PMT tokens (time-profile MLP + PMT
+    position/ID embedding) trained with the head. Returns tokens with event index and a per-event mean."""
+
+    def __init__(self, d, tok_cfg=None):
+        super().__init__()
+        from qlfm.models.encoder import LightEmbed
+        from qlfm.tokenize import TokCfg
+        self.cfg = tok_cfg or TokCfg()
+        self.embed = LightEmbed(d, len(self.cfg.light_edges))
+        self.modality = nn.Parameter(torch.zeros(d))
+
+    def forward(self, b):
+        from qlfm.tokenize import tokenize_light
+        lt = tokenize_light(b["oph_ch"], b["oph_t"], b["oph_pe"], b["oph_evt"], b["n_events"], self.cfg)
+        z = self.embed(lt) + self.modality
+        pooled = scatter_mean(z.float(), lt.evt, dim=0, dim_size=b["n_events"])
+        return z, lt.evt, pooled

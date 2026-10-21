@@ -1,0 +1,24 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:20:00
+#PBS -l filesystems=home:eagle
+#PBS -N smoke_r2
+#PBS -j oe
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+cd $QLFM_ROOT
+MPY=$QLFM_WORK/tools/venv-mamba/bin/python
+O=$QLFM_WORK/round2/smoke; mkdir -p $O
+echo "== fm4npp pretrain smoke"
+mpiexec -n 4 --ppn 4 --cpu-bind depth -d 8 $MPY -u -m qlfm.train_pretrain --method fm4npp --out $O/fm4npp_pre \
+  --steps 150 --bs 8 --lr-abs 2e-4 --wd 0.01 --clip 0.1 --warmup 0.1 --log-every 25 --val-every 150 --n-val 64 --workers 7 \
+  --time-limit 8 2>&1 | grep -v -E "Warn|bind: warning" | tail -12
+echo "== downstream smoke"
+DS="--label-frac 0.01 --min-steps 60 --max-steps 60 --eval-every 30 --n-val 64 --n-test 64 --workers 4 --bs 8 --time-limit 5"
+CUDA_VISIBLE_DEVICES=0 $MPY -m qlfm.train_downstream $DS --task evt_nu --mode frozen --backbone fm4npp --fm $O/fm4npp_pre/fm.pt --late-light 1 --out $O/ds_fm4npp_evt > $O/ds_fm4npp_evt.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 $MPY -m qlfm.train_downstream $DS --task hit --mode finetune --backbone fm4npp --fm $O/fm4npp_pre/fm.pt --late-light 1 --out $O/ds_fm4npp_hit > $O/ds_fm4npp_hit.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 $PY -m qlfm.train_downstream $DS --task hit --mode frozen --fm $QLFM_WORK/pre/c_f0.90/fm.pt --late-light 1 --out $O/ds_qlfm_hit > $O/ds_qlfm_hit.log 2>&1 &
+CUDA_VISIBLE_DEVICES=3 $PY -m qlfm.train_downstream $DS --task flavor --mode finetune --fm $QLFM_WORK/pre/cl_f0.90/fm.pt --late-light 1 --layer-decay 0.9 --out $O/ds_qlfm_fl > $O/ds_qlfm_fl.log 2>&1 &
+wait
+for f in $O/ds_*.log; do echo "== $f"; grep -E "^TEST|Error|error" $f | tail -3 | cut -c1-300; done
