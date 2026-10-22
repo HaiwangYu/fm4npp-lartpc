@@ -78,3 +78,59 @@ class LateLight(nn.Module):
         z = self.embed(lt) + self.modality
         pooled = scatter_mean(z.float(), lt.evt, dim=0, dim_size=b["n_events"])
         return z, lt.evt, pooled
+
+
+class XFusion(nn.Module):
+    """Strong late fusion (round 3): project every backbone's tokens to a common width, then n_layers of
+    [charge tokens cross-attend to the event's 32 PMT tokens + MLP]. Light tokens come from LateLight at the
+    same width. Identical for every backbone, so the head size no longer depends on the backbone width."""
+
+    def __init__(self, d_in, d=256, n_layers=2, heads=8, mlp_ratio=2):
+        super().__init__()
+        self.d, self.h = d, heads
+        self.proj = nn.Sequential(nn.LayerNorm(d_in), nn.Linear(d_in, d))
+        self.layers = nn.ModuleList(nn.ModuleDict(dict(
+            nq=nn.LayerNorm(d), nkv=nn.LayerNorm(d), q=nn.Linear(d, d), kv=nn.Linear(d, 2 * d), o=nn.Linear(d, d),
+            n2=nn.LayerNorm(d), mlp=mlp([d, mlp_ratio * d, d]))) for _ in range(n_layers))
+
+    def forward(self, z, evt, zl, n_events):
+        import torch.nn.functional as F
+        x = self.proj(z.float())
+        n_pmt = zl.shape[0] // n_events
+        lt = zl.float().view(n_events, n_pmt, self.d)              # LateLight emits n_pmt tokens per event, in order
+        order = torch.argsort(evt, stable=True)
+        es = evt[order]
+        cnt = torch.bincount(evt, minlength=n_events)
+        start = torch.cumsum(cnt, 0) - cnt
+        pos = torch.arange(len(es), device=z.device) - start[es]
+        X = x.new_zeros(n_events, int(cnt.max()), self.d)
+        X[es, pos] = x[order]
+        dh = self.d // self.h
+        for L in self.layers:
+            q = L["q"](L["nq"](X)).view(n_events, -1, self.h, dh).transpose(1, 2)
+            k, v = L["kv"](L["nkv"](lt)).view(n_events, n_pmt, 2, self.h, dh).permute(2, 0, 3, 1, 4)
+            a = F.scaled_dot_product_attention(q, k, v).transpose(1, 2).reshape(n_events, -1, self.d)
+            X = X + L["o"](a)
+            X = X + L["mlp"](L["n2"](X))
+        out = torch.empty_like(x)
+        out[order] = X[es, pos]
+        return out
+
+
+class RawHit(nn.Module):
+    """Common trainable per-hit adapter (round 3, T1 fairness): plane one-hot, normalized wire and tick,
+    log charge and rms -> 64-d. Gives every backbone the same per-hit raw information."""
+
+    def __init__(self, out=64):
+        super().__init__()
+        self.out = out
+        self.net = mlp([7, out, out], last_act=True)
+
+    def forward(self, b):
+        from qlfm import geometry as G
+        p = b["hit_plane"]
+        nw = torch.tensor(G.N_WIRES, device=p.device, dtype=torch.float32)[p]
+        f = torch.cat([nn.functional.one_hot(p, 3).float(), (b["hit_wire"].float() / nw)[:, None],
+                       (b["hit_time"].float() / G.N_TICKS)[:, None], torch.log1p(b["hit_q"].clamp(min=0) / 200)[:, None],
+                       (b["hit_rms"].float() / 5)[:, None]], 1)
+        return self.net(f)

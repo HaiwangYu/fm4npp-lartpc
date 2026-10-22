@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from qlfm.data.dataset import Corpus, EventDataset, collate, to_device
 from qlfm.data.labels import EV_KEYS, HIT_NU_EDEP_MEV, N_OUT, event_labels
 from qlfm.evaluate import metrics_for
-from qlfm.models.heads import AttnPool, HitHead, LateLight, MeanLinear
+from qlfm.models.heads import AttnPool, HitHead, LateLight, MeanLinear, RawHit, XFusion
 from qlfm.ref import build_backbone
 
 
@@ -28,7 +28,13 @@ def get_args(argv=None):
     ap.add_argument("--mode", required=True, choices=["scratch", "frozen", "finetune", "linear"])
     ap.add_argument("--fm", default=None, help="pretrained checkpoint (frozen/finetune/linear)")
     ap.add_argument("--backbone", default="qlfm", choices=["qlfm", "fm4npp", "panda", "polarmae"])
-    ap.add_argument("--late-light", type=int, default=0, help="late-fused PMT light in the head")
+    ap.add_argument("--late-light", type=int, default=0,
+                    help="late-fused PMT light: 0 none, 1 PMT tokens in the pooled set (R2P), "
+                         "2 strong fusion: 2 cross-attention layers (tokens <- PMT tokens) at a common width (round 3)")
+    ap.add_argument("--hit-feat", default="native", choices=["native", "raw", "none"],
+                    help="T1 per-hit input: backbone's own hit embedding (qlfm only), a common trainable raw-hit "
+                         "adapter for every backbone, or none")
+    ap.add_argument("--max-hits", type=int, default=None, help="FM4NPP: per-event hit cap override (default: checkpoint)")
     ap.add_argument("--light", type=int, default=1, help="scratch only; otherwise taken from the FM")
     ap.add_argument("--label-frac", type=float, default=0.01)
     ap.add_argument("--out", required=True)
@@ -62,13 +68,18 @@ def get_args(argv=None):
 class DownstreamModel(nn.Module):
     """Backbone (common interface, qlfm/ref) + identical heads; optional late-fused PMT light."""
 
-    def __init__(self, backbone, task, mode, late_light=False):
+    def __init__(self, backbone, task, mode, late_light=0, hit_feat="native"):
         super().__init__()
         self.backbone, self.task, self.mode = backbone, task, mode
-        d = backbone.d
+        late_light = int(late_light)
+        self.fusion = XFusion(backbone.d) if late_light == 2 else None
+        d = self.fusion.d if self.fusion is not None else backbone.d
         self.light = LateLight(d) if late_light else None
+        self.hit_feat = hit_feat
+        self.raw_hit = RawHit() if (task == "hit" and hit_feat == "raw") else None
+        hit_dim = {"native": backbone.hit_dim, "raw": 64, "none": 0}[hit_feat]
         if task == "hit":
-            self.head = HitHead(d, backbone.hit_dim, extra_dim=d if late_light else 0)
+            self.head = HitHead(d, hit_dim, extra_dim=d if late_light else 0)
         elif mode == "linear":
             self.head = MeanLinear(d, N_OUT[task])
         else:
@@ -89,9 +100,12 @@ class DownstreamModel(nn.Module):
         z, evt = o["z"], o["evt"]
         if self.light is not None:
             zl, levt, lpool = self.light(b)
+        if self.fusion is not None:
+            z = self.fusion(z, evt, zl, b["n_events"])
         if self.task == "hit":
             extra = lpool[b["hit_evt"]] if self.light is not None else None
-            return self.head(o["h_hit"], z, o["hit2tok"], extra), o
+            h_hit = {"native": o["h_hit"], "none": None}.get(self.hit_feat) if self.raw_hit is None else self.raw_hit(b)
+            return self.head(h_hit, z, o["hit2tok"], extra), o
         if self.light is not None:
             z, evt = torch.cat([z.to(zl.dtype), zl]), torch.cat([evt, levt])
         return self.head(z, evt, b["n_events"]), o
@@ -177,7 +191,7 @@ def main(argv=None):
 
     # ---- model ----
     backbone = build_backbone(args.backbone, args, None if args.mode == "scratch" else args.fm)
-    model = DownstreamModel(backbone, args.task, args.mode, bool(args.late_light)).to(dev)
+    model = DownstreamModel(backbone, args.task, args.mode, args.late_light, args.hit_feat).to(dev)
     if args.mode in ("frozen", "linear"):
         for n_, p in backbone.named_parameters():
             p.requires_grad_("adapter_" in n_)            # reference adapters (e.g. FM4NPP layer mix) stay trainable

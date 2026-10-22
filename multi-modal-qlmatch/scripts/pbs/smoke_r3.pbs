@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -A neutrinoGPU::debug
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:eagle
+#PBS -N smoke_r3
+#PBS -j oe
+# Round-3 smoke tests: strong late fusion (--late-light 2), --hit-feat raw/none, FM4NPP without hit cap, FM4NPP m4 memory.
+source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
+cd $QLFM_ROOT
+S=$QLFM_WORK/r3_smoke; P=$QLFM_WORK/pre
+PIMM=$QLFM_WORK/tools/pimm/.venv/bin/python; MAMBA=$QLFM_WORK/tools/venv-mamba/bin/python
+T="--label-frac 0.01 --seed 0 --max-steps 20 --min-steps 20 --eval-every 20 --n-val 64 --n-test 64 --workers 4 --time-limit 8"
+ds() {  # gpu python name args...
+  local g=$1 py=$2 n=$3; shift 3
+  CUDA_VISIBLE_DEVICES=$g PIMM_ROOT=$QLFM_WORK/tools/pimm timeout 900 $py -m qlfm.train_downstream $T --out $S/$n "$@" > $S/$n.log 2>&1
+  echo "$n exit=$? $(grep -h '^TEST' $S/$n.log | cut -c1-90)"
+}
+{ ds 0 $PY qM_xf_evt --task evt_nu --mode frozen --fm $P/m_cl_f0.90/fm.pt --late-light 2
+  ds 0 $PY qM_xf_hit --task hit --mode frozen --fm $P/m_cl_f0.90/fm.pt --late-light 2
+  ds 0 $PY qM_xf_ft_hit --task hit --mode finetune --layer-decay 0.9 --fm $P/m_cl_f0.90/fm.pt --late-light 2; } &
+{ ds 1 $PY qS_raw_hit --task hit --mode frozen --fm $P/cl_f0.90/fm.pt --late-light 1 --hit-feat raw
+  ds 1 $PY qS_none_hit --task hit --mode frozen --fm $P/cl_f0.90/fm.pt --late-light 1 --hit-feat none
+  ds 1 $MAMBA f_nocap_xf_hit --task hit --mode frozen --backbone fm4npp --fm $P/fm4npp/fm.pt --late-light 2 --max-hits 100000; } &
+{ ds 2 $PIMM panda_xf_evt --task evt_nu --mode frozen --backbone panda --fm $P/panda --late-light 2 --accum 4
+  ds 2 $PIMM panda_xf_raw_hit --task hit --mode frozen --backbone panda --fm $P/panda --late-light 2 --hit-feat raw --accum 4; } &
+{ ds 3 $PIMM polar_xf_flav --task flavor --mode frozen --backbone polarmae --fm $P/polarmae --late-light 2
+  ds 3 $MAMBA f_nocap_ft_evt --task evt_nu --mode finetune --layer-decay 0.9 --backbone fm4npp --fm $P/fm4npp/fm.pt --late-light 1 --max-hits 100000 --accum 8; } &
+wait
+echo "== FM4NPP m4 pretraining memory test"
+mpiexec -n 4 --ppn 4 --cpu-bind depth -d 8 $MAMBA -u -m qlfm.train_pretrain --out $S/m4 --time-limit 6 --method fm4npp --subset pre_f0.90 --d 512 --depth 12 --d-state 32 --klen 30 --dropout 0.1 --bs 8 --lr-abs 2e-4 --wd 0.01 --clip 0.1 --warmup 0.1 --steps 80 --val-every 100000 --log-every 10 --workers 7 --n-val 16 2>&1 | grep -v -E "Warn|bind: warning" | tail -12
+nvidia-smi --query-gpu=memory.total --format=csv | tail -1

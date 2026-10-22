@@ -26,7 +26,7 @@ def main():
     corpus = Corpus(args.corpus)
     gidx = np.load(gfile)
     backbone = build_backbone(args.backbone, args, args.fm)
-    model = DownstreamModel(backbone, "hit", args.mode, bool(args.late_light)).to(dev)
+    model = DownstreamModel(backbone, "hit", args.mode, args.late_light, args.hit_feat).to(dev)
     missing = model.load_state_dict(torch.load(f"{run}/best.pt", map_location=dev), strict=False)
     assert not [k for k in missing.missing_keys if not k.startswith("backbone.") or "adapter_" in k], missing
     loader = torch.utils.data.DataLoader(EventDataset(corpus, gidx, truth=True), batch_size=4, shuffle=False,

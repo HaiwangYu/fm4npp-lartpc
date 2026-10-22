@@ -190,9 +190,10 @@ class FM4NPPBackbone(nn.Module):
 def build(name, args, ckpt):
     if ckpt is None:
         net = MambaGPT(d=getattr(args, "d", 256), n_layers=getattr(args, "depth", 12))
-        return FM4NPPBackbone(net, getattr(args, "max_hits", 16384))
+        return FM4NPPBackbone(net, getattr(args, "max_hits", None) or 16384)
     s = torch.load(ckpt, map_location="cpu", weights_only=False)
     a = s["args"]
     net = MambaGPT(d=a["d"], n_layers=a["depth"], d_state=a.get("d_state", 16), klen=a.get("klen", 30))
     net.load_state_dict(s["fm"])
-    return FM4NPPBackbone(net, a.get("max_hits", 16384))
+    cap = getattr(args, "max_hits", None)                 # downstream override (round 3: no cap)
+    return FM4NPPBackbone(net, cap if cap else a.get("max_hits", 16384))
