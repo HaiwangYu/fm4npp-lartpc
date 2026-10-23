@@ -26,7 +26,7 @@ BACKBONES = {
     "panda": ("@pimm ", "panda", f"{P}/panda", " --accum 4", " --accum 8"),
     "polarmae": ("@pimm ", "polarmae", f"{P}/polarmae", "", " --accum 4"),
     "fm4npp": ("@mamba ", "fm4npp", f"{P}/fm4npp/fm.pt", NOCAP, " --accum 8"),
-    "fm4npp_m4": ("@mamba ", "fm4npp", f"{P}/fm4npp_m4/fm.pt", NOCAP, " --accum 8"),
+    "fm4npp_m4": ("@mamba ", "fm4npp", f"{P}/fm4npp_m4/fm.pt", NOCAP, " --accum 32"),   # 21M Mamba, uncapped: FT OOM at micro-batch 4
 }
 
 
