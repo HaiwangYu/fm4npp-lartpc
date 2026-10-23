@@ -2,6 +2,7 @@
 \usepackage[margin=2.4cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
+\usepackage{rotating}
 \usepackage{booktabs,multirow,array,tabularx}
 \usepackage{xcolor}
 \usepackage{xurl}
@@ -176,6 +177,42 @@ Figure~\ref{fig:model} shows the architecture.
 
 A modality embedding is added to every token. The charge-only model simply has no light tokens. Tokenization runs on the GPU from raw hits.
 
+\subsection{Walk-through on one event}\label{sec:walk}
+Figures~\ref{fig:cin}--\ref{fig:lin} follow one event from the raw data to the token vectors. The event is run 6182, subrun 91, event 4562: a 1.6\,GeV \nue CC shower at $z\approx910$\,cm, overlaid on cosmic rays. Table~\ref{tab:shapes} lists the tensor shapes at each step. All plots are made with the model's own tokenizer (\code{scripts/r1\_io\_figures.py}).
+
+\begin{table}[h]\centering\footnotesize
+\caption{Tensor shapes for this event ($d=256$ for the 6.6M model).}\label{tab:shapes}
+\begin{tabular}{lll}
+\toprule
+Step & Charge & Light\\
+\midrule
+raw input & 11{,}469 hits $\times$ (plane, wire, tick, $q$, rms) & 390 optical hits $\times$ (PMT, time, PE)\\
+per-element features & 11{,}469 $\times$ 4 (in-cell $\Delta w$, $\Delta t$, $\log q$, rms) & --\\
+tokens & 1{,}502 cells & 32 PMTs $\times$ 17 (16 time bins + total)\\
+token vectors & 1{,}502 $\times$ $d$ & 32 $\times$ $d$\\
+encoder input / output & \multicolumn{2}{l}{one sequence of 1{,}534 vectors $\times$ $d$; every token attends to every other}\\
+MAE target (masked) & 34 per cell (4$\times$8 sub-grid + 2 summaries) & 17 per PMT\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{sidewaysfigure}\centering
+\includegraphics[width=\textheight,height=0.82\textwidth,keepaspectratio]{../figures/r1_charge_input.png}
+\caption{\textbf{Charge input.} Top: the reconstructed wire hits of the three planes (wire vs.\ drift time). Bottom: the tokens. Every occupied 16-wire $\times$ 64-tick cell becomes one token, coloured by its total charge. The dashed box marks the neutrino; everything else is cosmic.}\label{fig:cin}
+\end{sidewaysfigure}
+
+\begin{sidewaysfigure}\centering
+\includegraphics[width=\textheight,height=0.82\textwidth,keepaspectratio]{../figures/r1_charge_token.png}
+\caption[One charge token]{\textbf{One charge token.}
+(a) A $9\times9$-cell neighbourhood of the neutrino shower on the Y plane. Red crosses are token positions, i.e.\ the charge centroids; the orange box is the example token. (b) The token's 30 hits in cell coordinates. The centroid (red) lies on the charge, not at the cell centre (grey). (c) The 34-value MAE target of this token: the charge in a $4\times8$ sub-grid of the cell, plus $\log$ hit count and $\log$ total charge. (d) The 4 features of each hit, which a shared MLP maps to a 128-d hit embedding. (e) How the token vector is assembled: content (pooled hit embeddings), position (centroid, in-cell offset, plane) and modality.}\label{fig:ctok}
+\end{sidewaysfigure}
+
+\begin{sidewaysfigure}\centering
+\includegraphics[width=\textheight,height=0.82\textwidth,keepaspectratio]{../figures/r1_light_input.png}
+\caption[Light input]{\textbf{Light input.}
+(a) All optical hits in the 24\,$\mu$s readout window. Grey lines show the 16 time bins, which are finer around the beam flash at 3--6\,$\mu$s. (b) The 32 light tokens. Each row is one PMT: $\log(1+\mathrm{PE})$ in each time bin, plus the total. (c) Token positions, i.e.\ the PMT $(y,z)$ coordinates, with circle area proportional to total PE. The beam flash sits above the neutrino at $z\approx950$\,cm. (d) One light token in detail (PMT 0). Its optical hits (blue) are binned into the 17-value feature vector (red step line). The later hit at 19\,$\mu$s belongs to a cosmic flash.}\label{fig:lin}
+\end{sidewaysfigure}
+
 \subsection{Backbone}
 The encoder is a pre-LN Transformer~\cite{preln}: 8 layers, token width $d{=}256$, 8 heads of dimension 32, and MLP hidden size 1024. It has 6.6M parameters. Pre-LN applies LayerNorm to the input of each sublayer and leaves the residual path untouched:
 \[
@@ -199,6 +236,20 @@ We use a multi-modal masked autoencoder~\cite{mae,multimae}.
   \item all 32 PMTs are masked, with probability 0.4. This makes the task \emph{charge$\to$light} prediction, a learned stand-in for a photon library combined with flash matching;
   \item nothing is masked, with probability 0.2.
 \end{itemize}
+
+\paragraph{Input and output on one event.} Figure~\ref{fig:mae} applies the trained 6.6M charge+light MAE to the walk-through event.
+\begin{itemize}
+  \item 60\% of the charge tokens are hidden from the encoder: drift-time strips across all planes plus random cells.
+  \item All 32 PMT tokens are hidden.
+  \item The decoder then predicts each hidden cell's in-cell charge pattern and summaries, and the full light pattern, from the visible charge alone.
+\end{itemize}
+
+\begin{sidewaysfigure}\centering
+\includegraphics[width=\textheight,height=0.82\textwidth,keepaspectratio]{../figures/r1_mae_io.png}
+\caption[Masked-autoencoder input and output]{\textbf{Masked-autoencoder input and output} for the event of Sec.~\ref{sec:walk} (qlfm-S CL).
+(a) Encoder input on the Y plane: visible tokens; masked tokens are shown in red. (b) Target. (c) Output: visible tokens plus the decoder's reconstruction of the masked ones (total charge). (d) Reconstructed vs.\ true cell summaries for all masked tokens of the event. (e) Three masked cells: true and predicted $4\times8$ in-cell charge. (f, g) With all PMTs masked, the light is predicted from charge alone: true vs.\ predicted total PE per PMT. The \emph{where} (the downstream PMTs above the shower) and the order of magnitude are reproduced. (h) Time profiles of the brightest PMTs. Charge alone cannot tell \emph{when} within the 1.6\,$\mu$s beam spill the interaction happened, so the predicted flash is spread over the 3.5--5\,$\mu$s bins. Later cosmic flashes are not predicted.
+The masked-charge error of this batch is $0.45\times$ the mean-predictor baseline (standardized MSE 0.45 vs.\ 0.99).}\label{fig:mae}
+\end{sidewaysfigure}
 
 \paragraph{Schedule.} Training runs for 17k steps at a global batch of 256 events, on one Polaris node (4$\times$A100) in about 45\,min. We use AdamW with learning rate $1.5\times10^{-4}$, 5\% warmup, cosine decay and bf16. The step count is the same for every pretraining fraction.
 
