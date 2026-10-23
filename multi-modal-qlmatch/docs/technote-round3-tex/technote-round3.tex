@@ -22,7 +22,7 @@
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother
 
 \title{\textbf{Charge + Light Foundation Model for MicroBooNE Open Data:\\ Fairness Controls for the Reference Comparison}\\[4pt]
-\large Technical Note --- Round 3 \quad {\normalsize\color{red!70!black}(DRAFT: \rdone/\rplan{} result cells filled)}}
+\large Technical Note --- Round 3}
 \author{Haiwang Yu\thanks{Prepared with the assistance of Claude (Anthropic). Code: \url{https://github.com/HaiwangYu/fm4npp-lartpc}, branch \code{main}, package \code{multi-modal-qlmatch/qlfm}. Tracking: GitHub issue \#5. Round~1 (the qlfm model) and round~2 (the comparison with Pandora and four foundation-model recipes) are described in \code{docs/technote-round1.pdf} and \code{docs/technote-round2.pdf}.}}
 \date{October 23, 2026}
 
@@ -55,7 +55,7 @@ Findings:
   \item \textbf{The hit embedding, FM4NPP's hit cap and its size explain little.}
 \end{itemize}
 
-This is a draft: \rdone{} of \rplan{} result entries are filled. The remaining FM4NPP-m4 runs are marked \pend.
+Round~3 used 20.5 Polaris node-hours.
 \end{abstract}
 
 \tableofcontents
@@ -117,7 +117,13 @@ This is a draft: \rdone{} of \rplan{} result entries are filled. The remaining F
   \begin{itemize}
     \item Removing the 16{,}384-hit cap lifts frozen hit F1 from 0.463 to 0.489 (fine-tuned 1\%: $0.620\to0.654$).
     \item Except for a single-seed dip of m3 flavor at 10\% ($0.557\to0.501$), the event tasks are within $\pm0.02$.
-    \item The 4$\times$ larger m4 (19.5M) at equal node-hours is at most slightly better than m3: hit F1 $+0.02$ frozen and $+0.08$ without light; flavor at 10\% 0.571 vs 0.501, where m3's value is the dip above. It stays far below Panda and qlfm-M CL.
+    \item The 4$\times$ larger m4 (19.5M) at equal node-hours is at most slightly better than m3.
+      \begin{itemize}
+        \item Hit F1: $+0.02$ frozen, $+0.03$ fine-tuned (0.685 vs 0.654), $+0.04$ with the raw adapter, $+0.08$ without light.
+        \item Flavor at 10\%: 0.571 vs 0.501, where m3's value is the dip above.
+        \item Fine-tuned energy is worse (0.409 vs 0.351).
+      \end{itemize}
+      It stays far below Panda and qlfm-M CL.
   \end{itemize}
 \end{enumerate}
 
@@ -199,14 +205,14 @@ Everything else follows round 2 (R2P):
   \item AdamW, lr $10^{-3}$ frozen and $2\times10^{-4}$ fine-tuned (layer decay 0.9);
   \item best-on-validation checkpoint.
 \end{itemize}
-Round 3 has used about 18 node-hours so far: 5.4 for pretraining, the rest downstream.
+Round 3 used 20.5 node-hours (\code{docs/figures/round3\_node\_hours.md}): 5.4 for pretraining (qlfm-M C 2.0, FM4NPP m4 3.4), the rest for 160 downstream runs and a smoke test.
 
 %=====================================================================
 \section{Results}
 %=====================================================================
 \begin{figure}[H]\centering
 \includegraphics[width=\textwidth]{../figures/round3_fusion.png}
-\caption{Frozen backbones with the round-2 late light (grey) and with strong late fusion (orange), at 1\% (top) and 10\% labels (bottom). ``pend.'': run not finished.}\label{fig:xf}
+\caption{Frozen backbones with the round-2 late light (grey) and with strong late fusion (orange), at 1\% (top) and 10\% labels (bottom).}\label{fig:xf}
 \end{figure}
 
 \newcommand{\xfhead}{\toprule
@@ -280,7 +286,7 @@ At matched size and compute, Panda (PTv3 + Sonata self-distillation) is a better
 
 \paragraph{Smaller effects.}
 \begin{itemize}
-  \item \textbf{Hit embedding:} qlfm's hit embedding is irrelevant at 21M (0.892 / 0.892 / 0.891) and matters only for the small charge-only model. A per-hit raw adapter is a cheap, general improvement for the point-cloud references (PoLAr-MAE $+0.07$).
+  \item \textbf{Hit embedding:} qlfm's hit embedding is irrelevant at 21M (0.892 / 0.892 / 0.891) and matters only for the small charge-only model. A per-hit raw adapter is a cheap, general improvement for the point-cloud references (PoLAr-MAE $+0.07$, FM4NPP m3/m4 $+0.06$/$+0.07$).
   \item \textbf{FM4NPP cap:} removing it is worth $\approx$0.03 hit F1.
   \item \textbf{FM4NPP size:} at equal node-hours, 4$\times$ more parameters (m4, 1.17M events) gives at most small gains over m3 (2.05M events).
   \item \textbf{Strong fusion at 1\% labels on flavor:} it sometimes overfits, e.g.\ qlfm-S CL $0.624\to0.496$ and PoLAr-MAE $0.554\to0.500$. The extra 1.2M head parameters are large for about 3k labelled events.
@@ -294,11 +300,7 @@ At matched size and compute, Panda (PTv3 + Sonata self-distillation) is a better
 \item Strong fusion was run frozen only. Fine-tuning with it, and combining it with the raw hit adapter, are not tested.
 \item The references remain charge-only in pretraining. Giving them light during pretraining (the fair ``early fusion for everyone'' test) needs changes to each recipe and is left open.
 \item Home advantage remains: qlfm's design was iterated on this dataset in round~1; the references use one untuned adaptation each.
-\item Pending runs (\pend): FM4NPP m4 fine-tuning at 1\%, m4 strong fusion at 10\%, and the m4 raw-adapter T1 run.
-  \begin{itemize}
-    \item The m4 fine-tune runs first ran out of memory at micro-batch 4 and are being re-run at micro-batch 1.
-    \item The statements about m4 above rest on the frozen runs.
-  \end{itemize}
+\item The FM4NPP m4 fine-tune runs first ran out of memory at micro-batch 4. They were re-run at micro-batch 1 (same batch of 32 events); the 1\% runs needed one save/resume across jobs and all reached their full step count.
 \end{itemize}
 
 %=====================================================================
