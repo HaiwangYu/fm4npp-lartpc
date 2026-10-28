@@ -14,7 +14,11 @@ import sys
 W = os.path.expandvars("$QLFM_WORK")
 P = f"{W}/pre"
 LF = (0.001, 0.01, 0.1, 1.0)
-COMMON = " --n-test 10000 --n-val 2000 --max-steps 6000 --resume 1"
+COMMON = " --n-test 10000 --n-val 2000 --resume 1"
+# step cap per label fraction: at >= 10 % labels a 6000-step cap (192k events) would make the 10 % and 100 % runs
+# see the same number of events, so the label-size scan would measure compute rather than data
+STEPS = {0.001: 6000, 0.01: 6000, 0.1: 24000, 1.0: 24000}
+FT_STEPS = {0.01: 6000, 0.1: 12000}
 M_ARCH = " --d 384 --depth 12 --heads 6 --light 0 --max-tokens 4096"
 # key: (interpreter prefix, --backbone, checkpoint, flags, fine-tune flags, MAE ckpt for zero-shot or None)
 CKPTS = {}
@@ -40,16 +44,16 @@ def main():
         if mae:
             lines.append((0, f"qlfm.t5_zeroshot --ckpt {mae} --n-test 10000 --out {root}/{key}/light/zeroshot/f0_s0"))
         for lf in LF:
-            lines.append((1 if lf < 0.01 else 2, f"{base} --mode frozen --label-frac {lf:g}{COMMON}{flags} "
+            lines.append((1 if lf < 0.01 else 2, f"{base} --mode frozen --label-frac {lf:g} --max-steps {STEPS[lf]}{COMMON}{flags} "
                                                   f"--out {root}/{key}/light/frozen/f{lf:g}_s0"))
         if key in FT:
             for lf in (0.01, 0.1):
                 f = ft_flags if ft_flags else flags
-                lines.append((3, f"{base} --mode finetune --label-frac {lf:g} --layer-decay 0.9{COMMON}{f} "
+                lines.append((3, f"{base} --mode finetune --label-frac {lf:g} --layer-decay 0.9 --max-steps {FT_STEPS[lf]}{COMMON}{f} "
                                  f"--out {root}/{key}/light/finetune/f{lf:g}_s0"))
     if not only:
         for lf in (0.01, 0.1, 1.0):
-            lines.append((3, f"qlfm.train_downstream --task light --mode scratch --label-frac {lf:g} --seed 0{M_ARCH}"
+            lines.append((3, f"qlfm.train_downstream --task light --mode scratch --label-frac {lf:g} --max-steps {STEPS[lf]} --seed 0{M_ARCH}"
                              f"{COMMON} --out {root}/scratch_M/light/scratch/f{lf:g}_s0"))
     for _, l in sorted(lines, key=lambda x: x[0]):
         print(l)

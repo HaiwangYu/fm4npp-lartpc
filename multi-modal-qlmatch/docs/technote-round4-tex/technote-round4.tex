@@ -254,7 +254,7 @@ T5 measures directly whether an encoder of the TPC charge knows what light the e
     \item qlfm-M CL / C at 10 and 90\% (qlfm-M C 10\% newly pretrained);
     \item Panda at 10\% (new) and 90\%, same number of iterations.
   \end{itemize}
-  \item \textbf{Labelled data:} frozen backbone at 0.1, 1, 10 and 100\% of the training pool (747 to 747k events); fine-tuning of the three 90\% encoders at 1 and 10\%; 6{,}000 steps maximum.
+  \item \textbf{Labelled data:} frozen backbone at 0.1, 1, 10 and 100\% of the training pool (747 to 747k events); fine-tuning of the three 90\% encoders at 1 and 10\%. Batch 32, at most 30 epochs, with a step cap of 6{,}000 at $\leq$1\% labels and 24{,}000 at 10 and 100\% (12{,}000 for fine-tuning at 10\%). A uniform 6{,}000-step cap would let the 10\% and 100\% runs see the same 192k events: in a first pass they reached the same MSE (0.616 vs 0.617 for qlfm-S CL 1\%), i.e.\ the scan would have measured compute rather than data.
   \item \textbf{References:}
   \begin{itemize}
     \item \emph{scratch}: the qlfm-M architecture trained from random initialization;
