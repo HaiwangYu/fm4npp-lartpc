@@ -33,9 +33,11 @@ class MicroBooNEPlaneDataset(Dataset):
         rng = np.random.default_rng(seed)
         samples = np.stack([np.repeat(idx, 3), np.tile(np.arange(3), len(idx))], 1)
         samples = samples[rng.permutation(len(samples))]
-        if max_len is not None:
+        if max_len is not None and max_len < len(samples):
             samples = samples[:max_len]
         self.samples = samples
+        # a small subset (pretrain-size scan) is cycled up to max_len samples, so every run has the same length
+        self.n = max_len if max_len is not None else len(samples)
         self.transform = Compose(transform)
         self.min_points = min_points
         self.loop = loop
@@ -57,4 +59,4 @@ class MicroBooNEPlaneDataset(Dataset):
         return self.transform(self.get_data(i))
 
     def __len__(self):
-        return len(self.samples) * self.loop
+        return self.n * self.loop

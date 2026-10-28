@@ -76,6 +76,33 @@ def energy_metrics(r):
                 rms_log=float(np.sqrt(np.mean((p - y) ** 2))))
 
 
+LIGHT_LARGE_PE = 200.0     # round-4 large-light cut (scripts/r4_light_stats.py), on the summed PMT total
+
+
+def light_metrics(r, large_pe=LIGHT_LARGE_PE):
+    """T5 charge -> light. pred / light_tgt: [n_events, 32, 17] log1p features (16 time bins + total).
+    score = -MSE over all features. Physics summaries on the per-PMT totals: total-PE resolution / bias and the
+    PMT-pattern distance (0.5 sum |f_pred - f_meas| of the PE fractions) on events with >= large_pe measured PE;
+    the fraction of events whose predicted and measured totals fall on the same side of large_pe."""
+    p, t = r["pred"].astype(np.float32), r["light_tgt"].astype(np.float32)
+    mse = float(((p - t) ** 2).mean())
+    mse_tot = float(((p[..., -1] - t[..., -1]) ** 2).mean())
+    pe_p, pe_t = np.expm1(p[..., -1]).clip(min=0), np.expm1(t[..., -1]).clip(min=0)
+    tp, tt = pe_p.sum(1), pe_t.sum(1)
+    big = tt >= large_pe
+    out = dict(score=-mse, mse=mse, mse_total=mse_tot, n_events=int(len(tt)), frac_large=float(big.mean()),
+               corr_log_total=float(np.corrcoef(np.log1p(tp), np.log1p(tt))[0, 1]),
+               large_agree=float(((tp >= large_pe) == big).mean()))
+    if big.sum() > 10:
+        rel = tp[big] / tt[big] - 1
+        q16, q50, q84 = np.quantile(rel, [0.16, 0.5, 0.84])
+        fp, ft = pe_p[big] / np.maximum(tp[big, None], 1e-9), pe_t[big] / tt[big, None]
+        tv = 0.5 * np.abs(fp - ft).sum(1)
+        out.update(tot_resolution=float((q84 - q16) / 2), tot_bias=float(q50), pattern_tv_med=float(np.median(tv)),
+                   pattern_tv_mean=float(tv.mean()))
+    return out
+
+
 def metrics_for(task, r):
     return {"hit": hit_metrics, "evt_nu": evt_nu_metrics, "flavor": flavor_metrics,
-            "energy": energy_metrics}[task](r)
+            "energy": energy_metrics, "light": light_metrics}[task](r)

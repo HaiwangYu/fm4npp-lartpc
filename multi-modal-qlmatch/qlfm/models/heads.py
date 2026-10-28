@@ -134,3 +134,44 @@ class RawHit(nn.Module):
                        (b["hit_time"].float() / G.N_TICKS)[:, None], torch.log1p(b["hit_q"].clamp(min=0) / 200)[:, None],
                        (b["hit_rms"].float() / 5)[:, None]], 1)
         return self.net(f)
+
+
+class LightHead(nn.Module):
+    """T5 (round 4): charge -> light. 32 learned PMT queries cross-attend (n_layers x [cross-attention + MLP]) to the
+    event's charge tokens, projected to a common width as in XFusion; each query outputs the PMT's 17 light-token
+    features (log1p PE in 16 time bins + log1p total). Identical for every backbone."""
+
+    def __init__(self, d_in, d=256, n_layers=2, heads=8, mlp_ratio=2, n_pmt=32, n_feat=17):
+        super().__init__()
+        self.d, self.h, self.n_pmt = d, heads, n_pmt
+        self.proj = nn.Sequential(nn.LayerNorm(d_in), nn.Linear(d_in, d))
+        self.query = nn.Parameter(torch.randn(n_pmt, d) * 0.02)
+        self.layers = nn.ModuleList(nn.ModuleDict(dict(
+            nq=nn.LayerNorm(d), nkv=nn.LayerNorm(d), q=nn.Linear(d, d), kv=nn.Linear(d, 2 * d), o=nn.Linear(d, d),
+            n2=nn.LayerNorm(d), mlp=mlp([d, mlp_ratio * d, d]))) for _ in range(n_layers))
+        self.out = nn.Sequential(nn.LayerNorm(d), nn.Linear(d, n_feat))
+
+    def forward(self, z, evt, n_events):
+        import torch.nn.functional as F
+        x = self.proj(z.float())
+        order = torch.argsort(evt, stable=True)
+        es = evt[order]
+        cnt = torch.bincount(evt, minlength=n_events)
+        start = torch.cumsum(cnt, 0) - cnt
+        pos = torch.arange(len(es), device=z.device) - start[es]
+        L = max(int(cnt.max()), 1)
+        K = x.new_zeros(n_events, L, self.d)
+        K[es, pos] = x[order]
+        keep = torch.zeros(n_events, L, dtype=torch.bool, device=z.device)
+        keep[es, pos] = True
+        keep[:, 0] |= cnt == 0                                     # an event without charge attends to one zero token
+        mask = keep[:, None, None, :]
+        Q = self.query[None].expand(n_events, -1, -1)
+        dh = self.d // self.h
+        for Ly in self.layers:
+            q = Ly["q"](Ly["nq"](Q)).view(n_events, self.n_pmt, self.h, dh).transpose(1, 2)
+            k, v = Ly["kv"](Ly["nkv"](K)).view(n_events, L, 2, self.h, dh).permute(2, 0, 3, 1, 4)
+            a = F.scaled_dot_product_attention(q, k, v, attn_mask=mask).transpose(1, 2).reshape(n_events, self.n_pmt, self.d)
+            Q = Q + Ly["o"](a)
+            Q = Q + Ly["mlp"](Ly["n2"](Q))
+        return self.out(Q)                                         # [n_events, n_pmt, n_feat]

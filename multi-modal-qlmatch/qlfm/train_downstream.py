@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from qlfm.data.dataset import Corpus, EventDataset, collate, to_device
 from qlfm.data.labels import EV_KEYS, HIT_NU_EDEP_MEV, N_OUT, event_labels
 from qlfm.evaluate import metrics_for
-from qlfm.models.heads import AttnPool, HitHead, LateLight, MeanLinear, RawHit, XFusion
+from qlfm.models.heads import AttnPool, HitHead, LateLight, LightHead, MeanLinear, RawHit, XFusion
 from qlfm.ref import build_backbone
 
 
@@ -72,6 +72,10 @@ class DownstreamModel(nn.Module):
         super().__init__()
         self.backbone, self.task, self.mode = backbone, task, mode
         late_light = int(late_light)
+        if task == "light":                                # T5: charge only, also for light-pretrained encoders
+            late_light = 0
+            if hasattr(backbone, "fm"):
+                backbone.fm.cfg.use_light = False
         self.fusion = XFusion(backbone.d) if late_light == 2 else None
         d = self.fusion.d if self.fusion is not None else backbone.d
         self.light = LateLight(d) if late_light else None
@@ -80,6 +84,8 @@ class DownstreamModel(nn.Module):
         hit_dim = {"native": backbone.hit_dim, "raw": 64, "none": 0}[hit_feat]
         if task == "hit":
             self.head = HitHead(d, hit_dim, extra_dim=d if late_light else 0)
+        elif task == "light":
+            self.head = LightHead(d)
         elif mode == "linear":
             self.head = MeanLinear(d, N_OUT[task])
         else:
@@ -111,7 +117,17 @@ class DownstreamModel(nn.Module):
         return self.head(z, evt, b["n_events"]), o
 
 
+def light_target(b):
+    """T5 target: the 32 x 17 light-token features (log1p PE per time bin, log1p total) of each event."""
+    from qlfm.tokenize import TokCfg, tokenize_light
+    lt = tokenize_light(b["oph_ch"], b["oph_t"], b["oph_pe"], b["oph_evt"], b["n_events"], TokCfg())
+    return lt.feat.view(b["n_events"], -1, lt.feat.shape[1])
+
+
 def loss_fn(task, out, b, y, class_w):
+    if task == "light":
+        t = light_target(b)
+        return F.mse_loss(out, t) + F.mse_loss(out[..., -1], t[..., -1])     # extra weight on the per-PMT total
     if task == "hit":
         tgt = (b["hit_nu_edep"] > HIT_NU_EDEP_MEV).float()
         w = b["hit_q"].clamp(min=1.0).log1p()            # mild charge weighting
@@ -143,7 +159,7 @@ def layer_groups(model, base_lr, decay):
 @torch.no_grad()
 def predict(model, loader, dev, task, labels_of):
     model.eval()
-    preds, ys, gid, extra = [], [], [], {"hit_q": [], "hit_pnd": [], "hit_evt": [], "hit_tgt": []}
+    preds, ys, gid, extra = [], [], [], {"hit_q": [], "hit_pnd": [], "hit_evt": [], "hit_tgt": [], "light_tgt": []}
     for b in loader:
         b = to_device(b, dev)
         with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -155,14 +171,17 @@ def predict(model, loader, dev, task, labels_of):
             extra["hit_pnd"].append(b["hit_pnd_nu"].cpu())
             extra["hit_tgt"].append((b["hit_nu_edep"] > HIT_NU_EDEP_MEV).cpu())
             extra["hit_evt"].append(b["gidx"][b["hit_evt"]].cpu())
+        elif task == "light":
+            preds.append(out.half().cpu())
+            extra["light_tgt"].append(light_target(b).half().cpu())
         else:
             preds.append(out.cpu())
         gid.append(b["gidx"].cpu())
     model.train()
     g = torch.cat(gid).numpy()
     res = {"gidx": g, "pred": torch.cat(preds).numpy()}
-    if task == "hit":
-        res.update({k: torch.cat(v).numpy() for k, v in extra.items()})
+    if task in ("hit", "light"):
+        res.update({k: torch.cat(v).numpy() for k, v in extra.items() if v})
     else:
         res["y"] = labels_of(g)
     return res

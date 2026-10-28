@@ -6,6 +6,8 @@ T2 evt_nu  : 3 classes: 0 = essentially no neutrino charge (cosmic-only-like), 1
              In-AV events with low visibility (between the thresholds) are excluded.
 T3 flavor  : FV + visible: 0 = numu CC, 1 = nue CC, 2 = NC.
 T4 energy  : FV + visible + CC: regress log(E_nu / GeV).
+T5 light   : (round 4) all events: predict the beam-window PMT light (32 PMTs x 17 light-token features) from the
+             charge alone. The target is built from the event's optical hits in the batch (no label array).
 """
 import numpy as np
 
@@ -15,8 +17,8 @@ HIT_NU_EDEP_MEV = 0.05    # hit is "neutrino" if its MC deposit exceeds this
 VIS_POS_Y_HITS = 30       # T2 positive: >= this many collection-plane neutrino hits
 VIS_NEG_HITS = 5          # T2 negative: <= this many neutrino hits (all planes)
 
-TASKS = ("hit", "evt_nu", "flavor", "energy")
-N_OUT = {"hit": 1, "evt_nu": 3, "flavor": 3, "energy": 1}
+TASKS = ("hit", "evt_nu", "flavor", "energy", "light")
+N_OUT = {"hit": 1, "evt_nu": 3, "flavor": 3, "energy": 1, "light": 17}
 
 
 def event_labels(ev):
@@ -37,6 +39,7 @@ def event_labels(ev):
         "evt_nu": (visible | nonu | out_av, np.where(visible, 1, np.where(out_av, 2, 0)).astype(np.int64)),
         "flavor": (in_fv & visible, flavor.astype(np.int64)),
         "energy": (in_fv & visible & cc, np.log(np.clip(ev["nu_energy"], 1e-3, None)).astype(np.float32)),
+        "light": (np.ones(len(vtx), bool), None),
     }
 
 
