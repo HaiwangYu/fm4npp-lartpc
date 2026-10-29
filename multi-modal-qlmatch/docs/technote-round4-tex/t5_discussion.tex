@@ -1,6 +1,4 @@
 \subsection{Discussion}
-\emph{Status: \tdone{} of \tplan{} runs. Still pending: Panda frozen at 10\% and 100\% labels (both pretraining fractions) and the Panda fine-tune at 10\%. The statements below do not depend on them unless marked \pend.}
-
 \paragraph{Light in pretraining is what matters.} For every model size and every labelled fraction, encoders pretrained with light predict it far better than the same encoders pretrained on charge only:
 \begin{itemize}
   \item frozen, 100\% labels: qlfm-M CL 0.503, qlfm-M C 0.586, scratch 0.622, constant 0.736;
@@ -19,10 +17,10 @@ The same ordering holds at the small size (qlfm-S CL 0.540 vs S C 0.658 at 100\%
   \item qlfm-S C: flat at every fraction (0.70--0.71 at 1\% labels).
   \item qlfm-M CL: a small gain from 10\% to 90\% (0.526 $\to$ 0.517 at 1\% labels; zero-shot 0.531 $\to$ 0.506).
   \item qlfm-M C: the 10\% checkpoint is \emph{better} than the 90\% one (0.635 vs 0.680 at 1\% labels, 0.567 vs 0.586 at 100\%). Its pretraining validation loss is also lower (0.321 vs 0.333 after the same 34{,}000 steps).
-  \item Panda: 10\% and 90\% are equal at $\leq$1\% labels (0.631 vs 0.629); 10 and 100\% labels \pend.
+  \item Panda: 10\% and 90\% are equal at every labelled fraction (0.631 vs 0.629 at 1\%, 0.576 vs 0.577 at 100\%).
 \end{itemize}
 All pretraining runs at a given size use the same number of steps, so the larger fractions see each event fewer times; beyond about 10\% of the split the pretraining is limited by steps and model size, not by data. The one clear data effect is that light-aware pretraining on only 1\% of the split is not enough. A real data-scaling study needs the step count (and model size) to grow with the data.
 
-\paragraph{Charge-only encoders: qlfm-M C vs Panda.} At 1\% labels Panda is better than qlfm-M C, frozen (0.629 vs 0.680; $\sigma_{\rm tot}$ 0.56 vs 0.83) and fine-tuned (0.607 vs 0.619). At 10\% labels qlfm-M C frozen reaches 0.589 and fine-tuned 0.540; Panda at 10\% and 100\% \pend. Neither charge-only encoder approaches the light-aware one.
+\paragraph{Charge-only encoders: qlfm-M C vs Panda.} At 1\% labels Panda is better than qlfm-M C, frozen (0.629 vs 0.680; $\sigma_{\rm tot}$ 0.56 vs 0.83) and fine-tuned (0.607 vs 0.619). With more labels the two converge. Frozen, Panda stays slightly ahead (0.580 vs 0.589 at 10\%, 0.577 vs 0.586 at 100\%; $\sigma_{\rm tot}$ 0.51 vs 0.53). Fine-tuned at 10\%, qlfm-M C is ahead (0.540 vs 0.557; $\sigma_{\rm tot}$ 0.39 vs 0.43). Neither charge-only encoder approaches the light-aware one (0.503 frozen, 0.506 zero-shot).
 
 \paragraph{All models under-predict the total light.} The median bias of $\Sigma_{\rm pred}/\Sigma_{\rm meas}-1$ is negative for every model ($-0.07$ for qlfm-M CL, $-0.24$ for qlfm-M C frozen, $-0.52$ for the constant). Part of this is the loss: regressing $\log(1+\text{PE})$ per bin predicts something closer to a geometric mean, and the sum of exponentiated bin predictions is then low. Correcting it would need a loss on linear PE or a calibration; it does not affect the comparison between encoders.
