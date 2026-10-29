@@ -1,1 +1,28 @@
-\paragraph{Discussion.} \pend
+\subsection{Discussion}
+\emph{Status: \tdone{} of \tplan{} runs. Still pending: Panda frozen at 10\% and 100\% labels (both pretraining fractions) and the Panda fine-tune at 10\%. The statements below do not depend on them unless marked \pend.}
+
+\paragraph{Light in pretraining is what matters.} For every model size and every labelled fraction, encoders pretrained with light predict it far better than the same encoders pretrained on charge only:
+\begin{itemize}
+  \item frozen, 100\% labels: qlfm-M CL 0.503, qlfm-M C 0.586, scratch 0.622, constant 0.736;
+  \item total-PE resolution $\sigma_{\rm tot}$: 0.30 (M CL), 0.53 (M C), 0.67 (scratch), 0.87 (constant);
+  \item PMT pattern TV$_{\rm PMT}$: 0.16, 0.26, 0.31, 0.44.
+\end{itemize}
+The same ordering holds at the small size (qlfm-S CL 0.540 vs S C 0.658 at 100\% labels). The charge-only encoders still beat scratch, so the charge MAE learns something about the light yield, but most of the gap is only closed when the pretraining sees the light. Fine-tuning qlfm-M C at 10\% labels (0.540, $\sigma_{\rm tot}$ 0.39) closes about 60\% of its frozen gap to qlfm-M CL, but does not reach it.
+
+\paragraph{The CL model needs no labels.} The zero-shot qlfm-M CL (its own MAE decoder, all light masked) reaches MSE 0.506 and $\sigma_{\rm tot}=0.33$, i.e.\ within 0.003 in MSE of the best labelled frozen result. Labels add almost nothing for this encoder; fine-tuning at 1\% labels is even slightly worse (0.532) than leaving the backbone frozen. This is the direct counterpart of the T2 light-cut result (Sec.~\ref{sec:light}): the CL backbone carries an internal prediction of the light from the charge, which is what lets it check charge--light \emph{consistency} in bright events.
+
+\paragraph{Scaling with labelled data.} All frozen encoders improve steeply from 0.1\% to 10\% labels and are flat from 10\% to 100\% (change $\leq$0.008 in MSE). Scratch is flat too (0.626 vs 0.622). This flatness should not be read as saturation in data: with the 24{,}000-step cap, 100\% labels is about one epoch (768k of 747k events) against about ten epochs at 10\%, so the two points have the same compute. The scan shows that 10\% of the labels is enough for a 1.3M-parameter head at this compute; whether more steps would let 100\% pull ahead is not tested.
+
+\paragraph{Scaling with pretraining data.}
+\begin{itemize}
+  \item qlfm-S CL: a large step from 1\% to 10\% of the pretraining split (0.636 $\to$ 0.552 at 1\% labels), then flat up to 90\%.
+  \item qlfm-S C: flat at every fraction (0.70--0.71 at 1\% labels).
+  \item qlfm-M CL: a small gain from 10\% to 90\% (0.526 $\to$ 0.517 at 1\% labels; zero-shot 0.531 $\to$ 0.506).
+  \item qlfm-M C: the 10\% checkpoint is \emph{better} than the 90\% one (0.635 vs 0.680 at 1\% labels, 0.567 vs 0.586 at 100\%). Its pretraining validation loss is also lower (0.321 vs 0.333 after the same 34{,}000 steps).
+  \item Panda: 10\% and 90\% are equal at $\leq$1\% labels (0.631 vs 0.629); 10 and 100\% labels \pend.
+\end{itemize}
+All pretraining runs at a given size use the same number of steps, so the larger fractions see each event fewer times; beyond about 10\% of the split the pretraining is limited by steps and model size, not by data. The one clear data effect is that light-aware pretraining on only 1\% of the split is not enough. A real data-scaling study needs the step count (and model size) to grow with the data.
+
+\paragraph{Charge-only encoders: qlfm-M C vs Panda.} At 1\% labels Panda is better than qlfm-M C, frozen (0.629 vs 0.680; $\sigma_{\rm tot}$ 0.56 vs 0.83) and fine-tuned (0.607 vs 0.619). At 10\% labels qlfm-M C frozen reaches 0.589 and fine-tuned 0.540; Panda at 10\% and 100\% \pend. Neither charge-only encoder approaches the light-aware one.
+
+\paragraph{All models under-predict the total light.} The median bias of $\Sigma_{\rm pred}/\Sigma_{\rm meas}-1$ is negative for every model ($-0.07$ for qlfm-M CL, $-0.24$ for qlfm-M C frozen, $-0.52$ for the constant). Part of this is the loss: regressing $\log(1+\text{PE})$ per bin predicts something closer to a geometric mean, and the sum of exponentiated bin predictions is then low. Correcting it would need a loss on linear PE or a calibration; it does not affect the comparison between encoders.
