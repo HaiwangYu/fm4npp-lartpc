@@ -1,0 +1,47 @@
+\subsection{Hand scan}\label{sec:t5hs}
+To see what the T5 numbers mean event by event, we scanned 20 test events drawn at random (uniform over the 10k T5 test events, fixed seed). We compare four encoders in their best common condition: 90\% pretraining (the largest checkpoints) and fine-tuning on 10\% labels.
+\begin{itemize}
+  \item This is the best T5 result for qlfm-M C (0.540) and Panda (0.557), and equal to the frozen result for qlfm-M CL (0.510 vs 0.503).
+  \item qlfm-S CL had no fine-tuned run, so one was added for the scan. Test MSE 0.534, $\sigma_{\rm tot}=0.39$ (frozen at 10\%: 0.540).
+\end{itemize}
+Each event has one page (Appendix~\ref{app:t5hs}). The page shows:
+\begin{itemize}
+  \item the charge input;
+  \item the measured PMT light and the four predictions, drawn on the PMT layout at a common area scale, with the measured light as black rings on each prediction;
+  \item the PMT-summed time profile;
+  \item the per-PMT totals;
+  \item a box with the per-event metrics.
+\end{itemize}
+Table~\ref{tab:t5hs} lists the total-PE error $\Delta\Sigma = \Sigma_{\rm pred}/\Sigma_{\rm meas}-1$ and the PMT-pattern distance TV for each event.
+
+\begin{table}[H]\centering\footnotesize
+\caption{T5 hand scan: per-event $\Delta\Sigma$ / TV$_{\rm PMT}$ for 20 random test events (90\% pretraining, fine-tuned on 10\% labels). Bold: lowest event MSE over the 32$\times$17 features. ``out of AV'': the $\nu$ interacted outside the active volume. Measured PE over 0--24\,$\mu$s.}\label{tab:t5hs}
+\begin{tabular}{rlrcccc}\toprule
+\# & truth & meas.\ PE & qlfm-M CL & qlfm-S CL & qlfm-M C & Panda\\\midrule
+\tabin{gen/t5_handscan.tex}
+\bottomrule\end{tabular}\end{table}
+
+\paragraph{What the scan shows.}
+\begin{itemize}
+  \item \textbf{Bright $\nu$ flashes are located correctly.} Eight events have a $\nu$ interaction in the AV with $\gtrsim$1{,}000\,PE in the beam window (\#2, 3, 5, 8, 12, 14, 18, 20). In almost all of them every encoder puts the light on the right PMTs. The totals are mostly within about $\pm$25\%, with two exceptions: in \#12, late cosmic light that no model predicts adds to the measured total ($-14$ to $-39$\%), and Panda is at $-44$\% in \#2. There are two clear failures of the pattern:
+  \begin{itemize}
+    \item qlfm-M C in \#8 predicts only background light ($-80$\%) for a $\nu_e$ CC that the other three find;
+    \item qlfm-S CL in \#3 spreads light over the middle of the detector ($+51$\%, TV 0.42) while the others match the bright cluster at high $z$.
+  \end{itemize}
+  qlfm-M CL has the lowest event MSE in 5 of these 8.
+  \item \textbf{Dim $\nu$ events.}
+  \begin{itemize}
+    \item The light of small in-AV NC events is still placed correctly by all four (\#16, 17: light at high $z$).
+    \item When the $\nu$ leaves almost no charge (\#6, 15: 0.0\% of the event charge), all four predict the flat cosmic-like pattern. There is nothing in the input to do better with.
+    \item \#19 ($\nu$ outside the AV, 1.6\% of the charge): qlfm-M CL, qlfm-S CL and Panda find the light at low $z$; qlfm-M C again predicts only background ($-65$\%).
+    \item \#13 ($\nu$ outside the AV, 0.1\% of the charge, 870\,PE beam flash at low $z$): the three qlfm models place it at low $z$; Panda puts its light at high $z$ (TV 0.68).
+  \end{itemize}
+  \item \textbf{Light the charge cannot predict.} The largest misses are light from outside the beam window:
+  \begin{itemize}
+    \item \#7: a 1{,}700\,PE cosmic flash at 7--10\,$\mu$s, missed by all ($-$78 to $-85$\%);
+    \item \#9: a flash at 2--3\,$\mu$s at low $z$. All miss it, but qlfm-M CL less (TV 0.32 vs 0.59--0.60).
+  \end{itemize}
+  Late light at 10--24\,$\mu$s is also missed (\#2, 12, 18). The charge readout does not fix the arrival time of a cosmic to the microsecond, so which cosmic made a flash at a given time in the 24\,$\mu$s window is not predictable from the charge. Only the beam-window $\nu$ flash has a known time.
+  \item \textbf{The flash time profile is smeared in every model.} The measured beam flash sits in one 0.5\,$\mu$s bin (4--5\,$\mu$s). All four predictions spread it over 3.5--6\,$\mu$s at 5--50 times lower peak height. The per-PMT totals (the 17th feature) remain right, but the sum of the predicted time bins in the 3--6\,$\mu$s window is far too low: for example 7{,}061\,PE measured vs 275--327 predicted in \#18. The likely cause is the loss: under a per-bin MSE in $\log(1+\text{PE})$, hedging over several bins costs less than placing a sharp peak in the wrong bin, since the $\nu$ time within the 1.6\,$\mu$s spill is only loosely constrained by the charge. The summary metrics of Table~\ref{tab:t5phys} use the per-PMT totals and do not see this.
+  \item \textbf{Summary.} Over the 20 events the median event MSE is 0.50 (qlfm-M CL), 0.53 (qlfm-S CL), 0.53 (qlfm-M C) and 0.52 (Panda); qlfm-M CL has the lowest MSE in 11 events (S CL 4, Panda 3, M C 2). The CL encoders are most clearly better on the hard cases (\#8, 9, 19), where a charge-only encoder fails to tie the light to the right part of the event.
+\end{itemize}

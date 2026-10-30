@@ -42,7 +42,7 @@ Findings:
 \begin{itemize}
   \item \textbf{Per event, Pandora is much closer to the foundation models than the pooled metric suggests.} Median per-event F1 (charge-weighted): Pandora 0.81, qlfm-M CL 0.91, qlfm-M C 0.80, Panda 0.79. The pooled gap (0.65 vs 0.90) is dominated by the 21\% of events where Pandora's highest-$\nu$-score slice is a cosmic, typically when the $\nu$ carries only a few per cent of the event charge.
   \item \textbf{Light is a strong but not the decisive shortcut for T2.} Beam-window PE alone separates in-AV $\nu$ from no-$\nu$ with AUC 0.93, but only 0.69 among events passing a 200\,PE cut. In that bright subsample qlfm-M CL keeps AUC 0.99, against 0.95--0.97 for Panda, 0.95 for a Pandora + BDT with light, and 0.82--0.86 for qlfm-M C. The advantage comes from charge--light \emph{consistency}, not from flash presence.
-  \item \textbf{The light-aware encoder already knows the light.} Predicting the 32-PMT light from charge alone (T5), qlfm-M CL reaches test MSE 0.50 and a 30\% total-PE resolution, against 0.59 / 53\% for qlfm-M C, 0.62 / 67\% for a model trained from scratch, and 0.74 / 87\% for a constant. Its own MAE decoder does as well with no labels at all (0.51 / 33\%). Results saturate at 10\% labels, and beyond about 10\% of the pretraining split, at the current model size and step budget. The two charge-only encoders (qlfm-M C, Panda) end up close to each other (0.58--0.59 frozen).
+  \item \textbf{The light-aware encoder already knows the light.} Predicting the 32-PMT light from charge alone (T5), qlfm-M CL reaches test MSE 0.50 and a 30\% total-PE resolution, against 0.59 / 53\% for qlfm-M C, 0.62 / 67\% for a model trained from scratch, and 0.74 / 87\% for a constant. Its own MAE decoder does as well with no labels at all (0.51 / 33\%). Results saturate at 10\% labels, and beyond about 10\% of the pretraining split, at the current model size and step budget. The two charge-only encoders (qlfm-M C, Panda) end up close to each other (0.58--0.59 frozen). A hand scan of 20 random events shows that all encoders locate bright $\nu$ flashes on the right PMTs. The light-aware encoders fail least often. No model can predict cosmic flashes at other times, or the sharp time of the beam flash.
 \end{itemize}
 \end{abstract}
 
@@ -254,7 +254,7 @@ T5 measures directly whether an encoder of the TPC charge knows what light the e
     \item qlfm-M CL / C at 10 and 90\% (qlfm-M C 10\% newly pretrained);
     \item Panda at 10\% (new) and 90\%, same number of iterations.
   \end{itemize}
-  \item \textbf{Labelled data:} frozen backbone at 0.1, 1, 10 and 100\% of the training pool (747 to 747k events); fine-tuning of the three 90\% encoders at 1 and 10\%. Batch 32, at most 30 epochs, with a step cap of 6{,}000 at $\leq$1\% labels and 24{,}000 at 10 and 100\% (12{,}000 for fine-tuning at 10\%). A uniform 6{,}000-step cap would let the 10\% and 100\% runs see the same 192k events: in a first pass they reached the same MSE (0.616 vs 0.617 for qlfm-S CL 1\%), i.e.\ the scan would have measured compute rather than data.
+  \item \textbf{Labelled data:} frozen backbone at 0.1, 1, 10 and 100\% of the training pool (747 to 747k events); fine-tuning of the three 90\% encoders at 1 and 10\% (and of qlfm-S CL 90\% at 10\%, for the hand scan of Sec.~\ref{sec:t5hs}). Batch 32, at most 30 epochs, with a step cap of 6{,}000 at $\leq$1\% labels and 24{,}000 at 10 and 100\% (12{,}000 for fine-tuning at 10\%). A uniform 6{,}000-step cap would let the 10\% and 100\% runs see the same 192k events: in a first pass they reached the same MSE (0.616 vs 0.617 for qlfm-S CL 1\%), i.e.\ the scan would have measured compute rather than data.
   \item \textbf{References:}
   \begin{itemize}
     \item \emph{scratch}: the qlfm-M architecture trained from random initialization;
@@ -284,6 +284,8 @@ Encoder & mode & labels & MSE & $\sigma_{\rm tot}$ & bias & TV$_{\rm PMT}$ & $\r
 
 \input{t5_discussion.tex}
 
+\input{t5_handscan_text.tex}
+
 %=====================================================================
 \section{Limitations}
 %=====================================================================
@@ -291,6 +293,7 @@ Encoder & mode & labels & MSE & $\sigma_{\rm tot}$ & bias & TV$_{\rm PMT}$ & $\r
 \item Our Pandora $\nu$ slice ignores the flash-match score and the selection cuts of a real analysis; a tuned selection would recover part of the 21\% wrong-slice events.
 \item The light cut is applied at test time only. Training on bright events only (or with light randomly dropped) would test how much of each model's T2 skill \emph{depends} on light; this is not done here.
 \item T5 uses a single seed and one head design. The zero-shot point uses the MAE decoder at a different masking ratio (all light masked) than in pretraining.
+\item The T5 hand scan covers only 20 events, with one random draw and one seed per model.
 \item The T5 constant reference uses the test-set mean and is thus slightly optimistic.
 \item The T5 scaling scans keep the step count fixed per point: the pretraining runs use the same steps at every data fraction, and 10\% and 100\% labels get the same 24{,}000 steps. Both axes therefore saturate partly because of compute, not data.
 \end{itemize}
@@ -311,7 +314,8 @@ Encoder & mode & labels & MSE & $\sigma_{\rm tot}$ & bias & TV$_{\rm PMT}$ & $\r
     \item \code{qlfm/models/heads.py} (\code{LightHead}), \code{qlfm/train\_downstream.py --task light}, \code{qlfm/evaluate.py} (\code{light\_metrics});
     \item \code{qlfm/t5\_zeroshot.py} --- MAE zero-shot;
     \item \code{scripts/make\_tasks\_r4.py} --- the run list, run by \code{scripts/run\_queue.sh};
-    \item \code{scripts/summarize\_r4\_t5.py} --- tables and figure.
+    \item \code{scripts/summarize\_r4\_t5.py} --- tables and figure;
+    \item \code{scripts/r4\_t5\_handscan.py} --- the hand-scan displays and table.
   \end{itemize}
 \item New pretraining: qlfm-M C on 10\% (\code{qlfm.pretrain}, round-3 recipe, \code{--light 0}); Panda on 10\% (\code{qlfm/ref/pimm\_configs/panda\_uboone\_f010.py}; the dataset cycles the smaller subset to keep 28{,}750 iterations).
 \item Compute: \input{gen/nodehours.tex}
@@ -331,5 +335,12 @@ Each page shows one test event:
 Dashed boxes mark the 1--99\% extent of the true $\nu$ hits per plane. Order: Pandora selects a cosmic slice (\#1--6), Pandora's slice absorbs cosmics (\#1--6), model worse than Pandora (\#1--6), typical (\#1--6).
 \clearpage
 \input{displays.tex}
+
+%=====================================================================
+\section{T5 hand-scan displays}\label{app:t5hs}
+%=====================================================================
+The 20 random test events of Sec.~\ref{sec:t5hs}, in the order of Table~\ref{tab:t5hs}. Encoders: 90\% pretraining, fine-tuned on 10\% labels, charge-only input. PMT views: circle area $\propto$ total PE over 0--24\,$\mu$s, with the same scale for the measured light and all four predictions; black rings show the measured light. Time profile: PE per $\mu$s summed over the 32 PMTs, with the 3--6\,$\mu$s beam window shaded.
+\clearpage
+\input{displays_t5.tex}
 
 \end{document}

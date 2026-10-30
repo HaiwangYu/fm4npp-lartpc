@@ -31,6 +31,8 @@ for f in ("0.10", "0.90"):
 CKPTS["panda_pre0.10"] = ("@pimm ", "panda", f"{P}/panda_f0.10", " --accum 4", " --accum 8", None)
 CKPTS["panda_pre0.90"] = ("@pimm ", "panda", f"{P}/panda", " --accum 4", " --accum 8", None)
 FT = ("qlfm_M_CL_pre0.90", "qlfm_M_C_pre0.90", "panda_pre0.90")
+# hand scan (round-4 appendix) compares the 10 % fine-tunes, so qlfm-S CL 90 % is fine-tuned at 10 % only
+FT_EXTRA = {"qlfm_S_CL_pre0.90": (0.1,)}
 
 
 def main():
@@ -46,8 +48,8 @@ def main():
         for lf in LF:
             lines.append((1 if lf < 0.01 else 2, f"{base} --mode frozen --label-frac {lf:g} --max-steps {STEPS[lf]}{COMMON}{flags} "
                                                   f"--out {root}/{key}/light/frozen/f{lf:g}_s0"))
-        if key in FT:
-            for lf in (0.01, 0.1):
+        if key in FT or key in FT_EXTRA:
+            for lf in FT_EXTRA.get(key, (0.01, 0.1)):
                 f = ft_flags if ft_flags else flags
                 lines.append((3, f"{base} --mode finetune --label-frac {lf:g} --layer-decay 0.9 --max-steps {FT_STEPS[lf]}{COMMON}{f} "
                                  f"--out {root}/{key}/light/finetune/f{lf:g}_s0"))
