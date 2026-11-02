@@ -1,0 +1,154 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,array,tabularx}
+\usepackage{xcolor}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{float}
+\captionsetup{font=small,labelfont=bf}
+\setlist{itemsep=2pt,topsep=4pt}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\have}{{\color{green!45!black}\textbf{supported now}}}
+\newcommand{\need}{{\color{orange!80!black}\textbf{needs new runs}}}
+
+\title{\textbf{Publishing the Charge + Light Foundation Model:\\ Multi-Modality Positioning and a Path to an ICML Workshop Paper}\\[4pt]
+\large Survey --- Round 1}
+\author{Haiwang Yu\thanks{Prepared with the assistance of Claude (Anthropic). Our results: \code{docs/technote-round\{1,2,3,4\}.pdf}, code at \url{https://github.com/HaiwangYu/fm4npp-lartpc}. Literature checked on 30 Oct--2 Nov 2026 via arXiv, Google Scholar and conference pages; arXiv numbers are given for every paper so they can be re-checked.}}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Our main result so far: in a self-supervised foundation model (FM) for the MicroBooNE LArTPC, putting the PMT light into the backbone during pretraining (\emph{early fusion}) gives much better features than adding light afterwards (\emph{late fusion}), even when the late fusion uses a strong cross-attention head and the backbone, objective and compute are otherwise identical. This note asks three questions.
+\begin{enumerate}
+  \item \textbf{Can we make a claim about multi-modal FMs?} Yes, if it is scoped: a controlled early-vs-late fusion result for two physically different detector modalities (ionization charge and scintillation light), at sensor level, on overlay open data. We found no published LArTPC FM that pretrains on charge and light jointly. Recent multi-modal work in HEP fuses levels of the reconstruction chain or several tracking/calorimetry subsystems, and does not isolate where fusion happens (Sec.~\ref{sec:landscape}).
+  \item \textbf{What can we borrow from Lukas Heinrich's and Aobo Li's work?} From Heinrich: masked modelling recipes, ``task = choice of input/output modalities'', and a compute-matched scaling protocol. From Li: spatio-temporal PMT modelling with interpretable attention, physics data packaged as ML benchmarks, and validity checks that catch models that ``game'' a score (Sec.~\ref{sec:insp}).
+  \item \textbf{What is missing for an ICML-workshop paper?} Five experiments, about 85--110 Polaris node-hours in total: a fusion-depth ladder with compute-matched scaling and seeds, a light-swap counterfactual (self-supervised flash matching), missing/degraded-modality robustness, a time-aware light objective, and probes of what light teaches the charge encoder (Sec.~\ref{sec:exp}).
+\end{enumerate}
+\end{abstract}
+
+%=====================================================================
+\section{What we can claim today}\label{sec:claim}
+
+The cleanest evidence is the round-3 ablation: the \emph{same} 21M-parameter qlfm backbone and MAE objective, pretrained with or without light. Without light in pretraining, even a strong late-fusion head (cross-attention from charge tokens to PMT tokens) recovers only part of the gap (Table~\ref{tab:claim}).
+
+\begin{table}[H]\centering\small
+\caption{Frozen backbones, 1\% labels (about 3--7k events), seed 0. Early fusion: light is part of the pretraining input. Late fusion: charge-only pretraining, light added by the strong cross-attention head (XF) at the downstream stage. Numbers from technote rounds 3 and 4.}\label{tab:claim}
+\begin{tabular}{llcccc}\toprule
+Backbone & Light enters & T1 hit F1 & T2 AUC & T3 macro-F1 & T4 res.\ ($\downarrow$)\\\midrule
+qlfm-M CL & pretraining (early) & \textbf{0.892} & \textbf{0.999} & \textbf{0.713} & \textbf{0.284}\\
+qlfm-M C  & head (late, XF) & 0.792 & 0.957 & 0.558 & 0.390\\
+Panda & head (late, XF) & 0.792 & 0.985 & 0.706 & 0.336\\
+\bottomrule\end{tabular}
+\end{table}
+
+Three further results from round 4 make the claim more than ``light is a strong feature'':
+\begin{itemize}
+  \item \textbf{Not a shortcut.} Among events with a bright beam flash ($\geq$200\,PE), the flash PE alone has AUC 0.69. There qlfm-M CL keeps T2 AUC 0.99, against 0.95--0.97 for Panda, 0.95 for a Pandora BDT with light and 0.82--0.86 for qlfm-M C. The early-fusion model uses charge--light \emph{consistency}, not flash presence.
+  \item \textbf{Cross-modal knowledge without labels.} The MAE decoder of qlfm-M CL predicts the 32-PMT light from charge alone with test MSE 0.506 and 33\% total-PE resolution, as well as a trained head on top of it (0.503 / 30\%). Charge-only encoders reach 0.58--0.59 / 51--53\%.
+  \item \textbf{Hand scan} (20 events): all encoders place bright $\nu$ flashes on the right PMTs; the light-aware encoders fail least often.
+\end{itemize}
+
+\paragraph{What we cannot claim yet (reviewer risks).}
+\begin{itemize}
+  \item \textbf{Generality.} Two modalities, one detector, two model sizes (6.6M, 21M), compute-limited training (both T5 scaling axes are flat beyond about 10\% at a fixed step count).
+  \item \textbf{Statistics.} Most entries are one seed; seed spreads exist only for some round-2 points.
+  \item \textbf{Fusion stage only at the two ends.} We compare input-level fusion with head-level fusion; there is no intermediate point and no compute-matched scaling curve per fusion type.
+  \item \textbf{Data.} Overlay samples: simulated $\nu$ on real off-beam cosmics. The $\nu$ light is simulated; no beam-on data.
+  \item \textbf{Objective confound for Panda.} Panda differs from qlfm in architecture and objective, so only the qlfm-M CL vs C comparison isolates the fusion choice.
+\end{itemize}
+
+%=====================================================================
+\section{Landscape: multi-modal foundation models}\label{sec:landscape}
+
+\subsection{Five key references}
+\begin{table}[H]\centering\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.6cm}LL}\toprule
+Reference & What it shows & Relation to us\\\midrule
+\textbf{[M1]} Shukor et al., \emph{Scaling Laws for Native Multimodal Models}, ICCV 2025, arXiv:2504.07951 &
+457 vision--language models: no inherent advantage of late fusion; early fusion is \emph{better at small parameter counts}, cheaper to train and simpler; mixture-of-experts with modality-specific weights helps further. &
+The ML-side version of our question. We would add the first data point from detector physics, where the two modalities are different physical processes, not image and text. Their protocol (fusion type as a scaling-law variable) is what E1 adopts.\\\midrule
+\textbf{[M2]} Bachmann et al., \emph{MultiMAE: Multi-modal Multi-task Masked Autoencoders}, ECCV 2022, arXiv:2204.01678 &
+One MAE over RGB, depth and segmentation tokens with a shared mask budget across modalities; cross-modal prediction emerges. &
+The recipe qlfm follows (one token sequence, masks across modalities). Our charge$\to$light zero-shot result is the physics analogue of its cross-modal prediction.\\\midrule
+\textbf{[M3]} Parker et al.\ (Polymathic AI), \emph{AION-1: Omnimodal Foundation Model for Astronomical Sciences}, NeurIPS 2025, arXiv:2510.17960 &
+Modality-specific tokenizers (images, spectra, scalars; 39 data types) then masked modelling over all tokens; 0.3--3.1B parameters; frozen encoder serves many tasks. &
+The strongest ``science omnimodal'' precedent. Its modalities are different \emph{observations of one object}; ours are two \emph{signals of one interaction} that must agree in time and space.\\\midrule
+\textbf{[M4]} Kakati, \dots, Heinrich, Kagan, \emph{Prompting Particle Physics: Tokenized Multi-modal Foundation Models for Combinatorially Many Tasks}, arXiv:2609.31862 (Sep 2026); with Krupa et al., \emph{Precision Tokenization for Multi-Modal Data in HEP}, arXiv:2610.13876 &
+Tracks, calorimeter cells, clusters, particles and jets in one shared token vocabulary; a task is a choice of input and output modalities (particle flow, fast simulation, \dots); the autoregressive variant beats a state-of-the-art particle flow. &
+The closest HEP multi-modal FM. It works on simulated collider jets and its ``modalities'' are reconstruction levels. It does not compare fusion stages. Our T5 is one direction (charge$\to$light) of their any-to-any idea.\\\midrule
+\textbf{[M5]} Alonso-Monsalve et al., \emph{Towards foundation-style models for energy-frontier heterogeneous neutrino detectors via self-supervised pre-training}, Nature Mach.\ Intell.\ 2026, arXiv:2604.07037 &
+Sparse ViT on voxelized FASERCal (simulation) with MAE + relational objectives; subsystem ablations; $10^3$ labels match a scratch model with 10$\times$ more; transfers to public LAr and scintillator benchmarks. &
+The closest neutrino FM with several detector subsystems. All subsystems are voxelized energy deposits; no light readout and no early-vs-late comparison.\\
+\bottomrule\end{tabularx}
+\end{table}
+
+\paragraph{Context (charge-only LArTPC and detector FMs).} PoLAr-MAE (arXiv:2502.02558), Panda (arXiv:2512.01324) and Panda~v2 across LArTPC, sPHENIX TPC and water Cherenkov (Young, Jes\'us-Valls, Terao, arXiv:2609.00611) pretrain on charge only. FM4NPP and its TPC tracking study (Li, Yu, \dots, Osborn, arXiv:2610.31180) are single-modality. On the light side, SIREN (arXiv:2211.01505) learns a differentiable photon-visibility model from simulation. A review of HEP FMs is Hallin, arXiv:2509.21434.
+
+\subsection{Innovation points we can make}
+Each point is marked \have{} or \need{} (experiment numbers refer to Sec.~\ref{sec:exp}).
+
+\begin{enumerate}[label=\textbf{I\arabic*.}]
+  \item \textbf{A controlled early-vs-late fusion study for detector FMs.} Same backbone, objective, data and pretraining compute; only the point where light enters changes. Early fusion beats late fusion on all four classification/regression tasks and the charge-only model on T5, most clearly at low labels and on the hit task. This is the physics counterpart of [M1] and is not addressed by [M4] or [M5]. \have{} for the two ends; \need{} (E1) for the fusion-depth ladder, scaling and seeds.
+  \item \textbf{Fusion of physically distinct sensor signals.} Ionization charge (sparse 3-plane hits, ms drift, topology) and scintillation light (32 PMTs, ns--$\mu$s, the event time $t_0$ and calorimetry) are two views of one interaction that must be \emph{consistent}. This differs from fusing views of one object [M3] or reconstruction levels [M4]. \have.
+  \item \textbf{A shortcut audit for multi-modal scientific FMs.} A strong modality can make a task trivial. We define a cut that removes the trivial cue (bright flash present) and show the early-fusion gain survives it. The method generalizes to any detector with a fast and a slow channel. \have; E2 makes it causal (light swap).
+  \item \textbf{Emergent cross-modal prediction = a learned detector response.} With no labels, the MAE decoder predicts the per-PMT light from charge as well as a supervised head. This is a self-supervised optical model and a basis for flash matching, compared with Pandora's \code{flashmatch\_score} and with SIREN-style visibility models. \have{} for prediction; \need{} (E2, E4) for flash matching and timing.
+  \item \textbf{Fusion as a scaling and robustness variable.} Measure how early and late fusion scale with compute (cf.\ [M1]; Heinrich's protocol, Sec.~\ref{sec:insp}) and how each degrades with missing or miscalibrated light (dead PMTs, gain shifts, light-free running). This matters for running experiments, where channels die and calibrations drift. \need{} (E1, E3).
+\end{enumerate}
+
+%=====================================================================
+\section{Inspirations from Lukas Heinrich and Aobo Li}\label{sec:insp}
+
+\begin{table}[H]\centering\footnotesize
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.3cm}LL}\toprule
+Paper & What they did & What we take\\\midrule
+\multicolumn{3}{l}{\textbf{Lukas Heinrich} (TUM)}\\\midrule
+\textbf{[H1]} Golling, Heinrich, Kagan, Klein, Leigh, Osadchy, Raine, \emph{Masked Particle Modeling on Sets}, MLST 2024, arXiv:2401.13537; and Leigh et al., \emph{Is Tokenization Needed for Masked Particle Modelling?}, MLST 2025, arXiv:2409.12589 &
+Masked modelling on unordered particle sets; ablations of target (VQ tokens vs direct regression), ordering and permutation invariance; the follow-up shows simpler regression targets beat VQ tokens on a broad downstream test bed. &
+A model for the paper's \emph{ablation section}: we should ablate the reconstruction target per modality (e.g.\ log-PE regression vs tokenized light) and present T1--T5 as a test bed, as MPMv2 does.\\\midrule
+\textbf{[H2]} Kakati, \dots, Heinrich, Kagan, \emph{Prompting Particle Physics}, arXiv:2609.31862 (= [M4]) &
+Any-to-any over modalities; the task is defined by which modalities are given and which requested. &
+Frame T5 as one prompt (charge$\to$light) and add the reverse (light$\to$charge: vertex $z$ and charge centroid from light) at no extra pretraining cost. Positions qlfm as ``any-to-any at sensor level''.\\\midrule
+\textbf{[H3]} Vigl, Hartman, Kagan, Heinrich, \emph{Neural Scaling Laws for Boosted Jet Tagging}, arXiv:2602.15781; Vigl et al., \emph{How to scale your HEP ML models}, arXiv:2610.06784 &
+Compute-optimal scaling laws in HEP; a recipe to compare design choices at matched compute (model size, horizon, LR, batch); \emph{lower-level inputs raise the attainable performance limit}. &
+Our ``flat beyond 10\%'' is a fixed-step artefact. Use their recipe so that early vs late fusion is compared at matched compute (E1). ``Adding light at the input raises the limit'' is the same type of statement as their lower-level-inputs result.\\\midrule
+\multicolumn{3}{l}{\textbf{Aobo Li} (UC San Diego)}\\\midrule
+\textbf{[A1]} Li et al., \emph{KamNet: An integrated spatiotemporal deep neural network for rare event search in KamLAND-Zen}, PRC 107, 014323 (2023), arXiv:2203.01870 &
+Spatio-temporal network over PMT hit maps that uses the detector's symmetry; attention used to explain which physics drives the background rejection. &
+Our light tokens lose the sharp flash time (hand scan). Model PMT light spatio-temporally (E4), and use attention maps charge$\to$PMT as the interpretability figure (E5).\\\midrule
+\textbf{[A2]} Fry, Li, Winslow et al., \emph{TIDMAD: Time Series Dataset for Discovering Dark Matter with AI Denoising}, NeurIPS 2025 Datasets \& Benchmarks, arXiv:2406.04378; Majorana Collab., \emph{Data Release for AI/ML Applications}, arXiv:2308.10856 &
+Physics data packaged for ML researchers: splits, a domain score, baselines, and an analysis chain from the score to a physics result. &
+Release our MicroBooNE-open-data splits, tasks T1--T5, metrics and baselines (incl.\ Pandora + BDT) as a multi-modal benchmark. This gives the ML audience something reusable.\\\midrule
+\textbf{[A3]} Schuetz, Poon, Li, \emph{RESuM: Rare Event Surrogate Model for Physics Detector Design}, ICLR 2025, arXiv:2410.03873; Ma et al., \emph{Beyond a Better Score: Long-Horizon Agentic ML Development and Evaluation Protocol for Physics Time Series}, arXiv:2610.14024 &
+RESuM states a physics design problem in ML terms and reaches a main ML venue. The second paper adds validity layers that flag models that ``game'' a score. &
+Write for ML readers: state the fusion question generically, put the physics in one panel. Present the light-cut audit as a validity check against score gaming (I3).\\
+\bottomrule\end{tabularx}
+\end{table}
+
+%=====================================================================
+\section{Extra experiments for a workshop paper}\label{sec:exp}
+
+Costs are Polaris node-hours (nh), from rounds 1--4: a qlfm-M pretraining on 90\% of the data is about 2--4\,nh; a frozen-head run 0.1--0.3\,nh.
+
+\begin{enumerate}[label=\textbf{E\arabic*.},leftmargin=*]
+  \item \textbf{Fusion-depth ladder at matched compute, with seeds} (I1, I5; [M1], [H3]). Light enters at the input (early), after $L/2$ blocks (mid), or only at the head (late, XF), plus charge only. All at qlfm-M size; early and late also at S and a larger L ($\approx$60M). Two to three compute budgets each; frozen heads on T1--T5 at 1\% labels for the scaling curve, and at 1\% and 10\% with 3 seeds at the largest budget. \emph{Deliverable:} downstream score vs pretraining compute, one curve per fusion depth. \emph{Success:} early fusion stays ahead and the gap does not close with compute. \emph{Cost} $\approx$55--70\,nh (about 40 for pretraining, 20 for heads).
+  \item \textbf{Light-swap counterfactual and self-supervised flash matching} (I3, I4). Replace each event's light by another event's, or shift it in time, and measure: (a) the drop in T2 and T1 for early vs late fusion; (b) the MAE cross-modal reconstruction error as a matching score, i.e.\ retrieve the true flash among $K$ candidates. Compare with Pandora's per-slice \code{flashmatch\_score} (already in the open data). \emph{Success:} the early-fusion model is sensitive to mismatched light and matches flashes at least as well as Pandora. \emph{Cost} $\approx$2--4\,nh (inference only).
+  \item \textbf{Missing and degraded modality} (I5). Evaluate with light removed, 4/8/16 random dead PMTs, $\pm$10--20\% gain shifts and time shifts. Add one pretraining with modality dropout so a single model serves C and C+L. \emph{Success:} early fusion degrades gracefully and, with modality dropout, is no worse than charge-only when light is absent. \emph{Cost} $\approx$8--12\,nh.
+  \item \textbf{Time-aware light objective} (I4; [A1]). The hand scan showed the beam flash smeared over 3.5--6\,$\mu$s by the per-bin log-MSE. Use finer bins around the beam window and a distribution-aware loss over time (earth-mover's distance on the per-PMT time profile, plus the total). Report flash-time resolution and beam-window PE. \emph{Success:} the beam-window PE is predicted within 25\% and the flash time to $\lesssim$0.5\,$\mu$s. \emph{Cost} $\approx$8--12\,nh (one pretraining + T5 heads).
+  \item \textbf{What does light teach the charge encoder?} (I2; [A1]). Linear probes on charge tokens only (light masked at inference) of the CL vs C encoders for the drift coordinate $x$ (which needs $t_0$, i.e.\ light), deposited energy and $\nu$ vertex; layer-wise CKA between the two encoders; attention maps charge$\to$PMT. \emph{Success:} the CL encoder's charge tokens encode $x$ / $t_0$ that the C encoder cannot. A physics-interpretable story for ML readers. \emph{Cost} $\approx$2\,nh.
+\end{enumerate}
+Optional, low cost: release the benchmark ([A2]); light$\to$charge prompts ([H2]); target ablation ([H1]).
+
+\paragraph{Total.} About 85--110\,nh, within the 5k-nh DD request and the 1.1k-nh/6-month neutrinoGPU plan. Priority if time is short: E2 and E5 (cheap, strengthen the mechanism story), then E1 (the headline figure), then E3 and E4.
+
+\paragraph{Suggested paper shape (4 pages + appendix).} Title along the lines of \emph{``Early fusion of ionization and scintillation in a self-supervised LArTPC foundation model''}. Figure~1: fusion depth vs compute (E1). Figure~2: light-cut audit and light swap (E2). Figure~3: zero-shot charge$\to$light with event displays. Table: T1--T5 for C, early, mid, late; seeds in the appendix.
+
+\paragraph{Venues.} ICML 2026 ran an \emph{AI4Physics} workshop (11 July 2026, OpenReview submissions; topics include surrogate simulators, data scarcity and trustworthy evaluation). The 2027 workshop list is not yet announced; ICML workshop deadlines are usually in late May. The NeurIPS \emph{Machine Learning and the Physical Sciences} workshop (non-archival) is the usual alternative, with a deadline typically in late summer.
+
+\end{document}
