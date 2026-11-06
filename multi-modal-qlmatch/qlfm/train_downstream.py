@@ -52,6 +52,8 @@ def get_args(argv=None):
     ap.add_argument("--time-limit", type=float, default=50.0)
     ap.add_argument("--resume", type=int, default=0,
                     help="at the time limit save OUT/state.pt and exit without testing; a later call resumes from it")
+    ap.add_argument("--state-every", type=float, default=20.0,
+                    help="with --resume, also save OUT/state.pt at an eval step every this many minutes (preemptable jobs)")
     ap.add_argument("--layer-decay", type=float, default=0.75)
     # architecture (scratch); for pretrained models these come from the checkpoint
     ap.add_argument("--d", type=int, default=256)
@@ -252,6 +254,12 @@ def main(argv=None):
         opt.load_state_dict(s["opt"])
         step, best, best_step, logs = s["step"], s["best"], s["best_step"], s["logs"]
         print(f"resumed at step {step}", flush=True)
+    t_state = time.time()
+
+    def save_state():
+        torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=step, best=best,
+                        best_step=best_step, logs=logs), st + ".tmp")
+        os.replace(st + ".tmp", st)
     model.train()
     if args.mode in ("frozen", "linear"):
         backbone.eval()
@@ -285,10 +293,12 @@ def main(argv=None):
                     best, best_step = m["score"], step
                     torch.save({k: v for k, v in model.state_dict().items()
                                 if args.mode not in ("frozen", "linear") or not k.startswith("backbone.") or "adapter_" in k}, ck)
+                if args.resume and step < steps and (time.time() - t_state) / 60 > args.state_every:
+                    save_state()
+                    t_state = time.time()
             if step >= steps or (time.time() - t0) / 60 > args.time_limit:
                 if args.resume and step < steps:
-                    torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=step, best=best,
-                                    best_step=best_step, logs=logs), st)
+                    save_state()
                     print(f"time limit at step {step}/{steps}: state saved, exiting for resume", flush=True)
                     return
                 done = True
@@ -300,6 +310,8 @@ def main(argv=None):
     np.savez_compressed(os.path.join(args.out, "preds_test.npz"), **{k: v for k, v in res.items() if v is not None})
     out = dict(info, best_val=best, best_step=best_step, test=m, minutes=(time.time() - t0) / 60, val_log=logs)
     json.dump(out, open(os.path.join(args.out, "metrics.json"), "w"), indent=1)
+    if os.path.exists(st):      # resume state is no longer needed (fine-tune states are ~0.25 GB)
+        os.remove(st)
     print("TEST", json.dumps(m), flush=True)
 
 
