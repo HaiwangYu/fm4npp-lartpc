@@ -68,7 +68,7 @@ Task & Target & Headline metric\\\midrule
 T1 & per-hit $\nu$ vs cosmic & {\color{plan}per-event F1 of $\nu$ hits, unweighted median over events} (up-weights small, hard events; TN4 used charge-weighted)\\
 T2 & event: in-AV $\nu$ / out-of-AV $\nu$ / no $\nu$ & {\color{plan}AUC in-AV vs no-$\nu$ on events passing the 200\,PE beam-flash cut} (TN4), where flash presence alone gives only AUC 0.69\\
 T3 & flavour: \numu{} CC / \nue{} CC / NC & macro-F1 (as TN1)\\
-T4 & $\log E_\nu$ for CC, fiducial & {\color{plan}resolution on a truth-based clean subset, the same for every model}: CC, fiducial vertex, $\nu$ carries $\geq$\todo{X}\% of the event charge, leading lepton contained \todo{finalize}\\
+T4 & $\log E_\nu$ for CC, fiducial & {\color{plan}resolution on a truth-based clean subset, the same for every model}: CC, fiducial vertex, $\nu$ carries $\geq$5\% of the event charge (keeps 69\%; median 7\%), visible fraction $E_{\rm dep}/E_\nu\geq0.3$ (containment proxy); all eligible events in the appendix\\
 T5 & charge $\to$ 32 PMT $\times$ 17 light features & test MSE in $\log(1+\mathrm{PE})$; total-PE resolution on $\geq$200\,PE events\\
 \bottomrule\end{tabularx}
 \end{table}
@@ -169,6 +169,8 @@ Mamba-2 + L & -- & -- & -- & -- & -- & --\\
   \item \textbf{Fusion depth} (survey E1). Light enters at the input, after $L/2$ blocks, or only at the head, all at matched compute.
   \item \textbf{Oracle 3D input} {\color{plan}(appendix-level).} The open data has no space points; a 3D input can only be truth energy deposits. It gives an upper bound on what 3D reconstruction could add, and is labelled as an oracle.
   \item \textbf{Light-swap counterfactual} (survey E2, optional): replace an event's light by another event's and measure the drop.
+  \item \textbf{Validity checks} (Josh Peterson's survey round 1.5, after Aobo Li's papers; inference only, $<$1\,nh each):
+  shuffled-label and plane/PMT-group ablations on T1/T2 (A2); MAE reconstruction loss vs T2 score for $\nu$ and cosmic events, to rule out an internal shortcut (A5); T1 efficiency vs drift coordinate, wire plane and hit amplitude (A3); data vs simulation: T5 errors on no-$\nu$ events (real off-beam cosmic light) vs $\nu$ events (simulated light) (A1, partial: no beam-off sample in the open data).
 \end{itemize}
 \begin{figure}[H]\centering
 \ph{3.5cm}{t-SNE of frozen event embeddings, qlfm-M CL vs qlfm-M C (pending).}
@@ -199,7 +201,8 @@ Overlay simulation (no beam-on data); one detector; models of about 20M paramete
 \begin{itemize}
   \item Section~\ref{sec:arch} first; total budget $\leq$200 node-hours (nh), charged to \code{neutrinoGPU::WireCellDev}, preemptable queue.
   \item All four recipes pretrained at the same budget, 20\,nh each, including a new qlfm-M CL run (the existing one used about 2\,nh, the round-2 references about 4\,nh).
-  \item T4 scored on a truth-based subset common to all models (not on each model's T1).
+  \item T4 scored on a truth-based subset common to all models (not on each model's T1): $\nu$ share of the event charge $\geq$5\%, visible fraction $\geq$0.3.
+  \item Benchmark release (splits, tasks, metrics, baselines). Josh Peterson's code audit is fixed before any campaign run; his checks A1--A5 go into Section~\ref{sec:how}.
   \item JEPA on the qlfm Transformer, so MAE vs JEPA isolates the objective.
   \item ``Reco-3D'' becomes an oracle study with truth deposits (no space points in the open data).
   \item Naming: PTv3 + Sonata (``as used in Panda''), not ``Panda'' and not ``PT2''.

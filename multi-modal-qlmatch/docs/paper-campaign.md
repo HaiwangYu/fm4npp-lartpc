@@ -22,18 +22,23 @@ Tracking doc for the paper campaign (started 2026-11-06). GitHub issue: https://
 |---|---|
 | 2026-11-06 | Do paper Sec. 4 (architecture comparison) first, ≤200 nh. |
 | 2026-11-06 | All four recipes pretrained at 20 nh each, including a new qlfm-M CL run (old one ≈2 nh; round-2 refs ≈4 nh). |
-| 2026-11-06 | T4 scored on a truth-based subset common to all models (CC, fiducial, ν share of event charge ≥ X%, lepton contained; X TBD). |
+| 2026-11-06 | T4 scored on a truth-based subset common to all models: CC, fiducial, visible ν, **ν share of event charge ≥ 5%** (keeps 69%; median share is 7%) and **visible fraction (ν deposited energy / E_ν) ≥ 0.3** (containment proxy). All-eligible T4 in the appendix. |
 | 2026-11-06 | JEPA is an objective on the qlfm Transformer (MAE vs JEPA isolates the objective). |
 | 2026-11-06 | "Reco-3D" ablation becomes an oracle study with truth deposits (open data has no space points). |
 | 2026-11-06 | Name the reference "PTv3 + Sonata (as used in Panda)" in the paper. |
+| 2026-11-06 | Release the benchmark (splits, tasks T1–T5, metrics, baselines incl. Pandora + BDT). |
+| 2026-11-06 | Josh's code audit (`audit-round1.md`, his fork) is fixed before any campaign run; his A1–A5 checks (survey-round1.5) go into paper Sec. 5. |
+| 2026-11-06 | Step-0 order: audit fixes → multi-task FT (tested on the existing qlfm-M CL / C checkpoints, also paper Sec. 3) → qlfm-M CL 20 nh → JEPA, PTv3 + L, Mamba-2 + L. |
 | 2026-11-06 | Venue: ICML 2027 main conference, Application-Driven ML area (deadline expected late Jan 2027). Fallbacks: ICML 2027 workshop, NeurIPS 2027 Datasets & Benchmarks, MLST. |
 
 ## Updated metrics (paper Sec. 3)
 
+Applied to saved test predictions (`preds_test.npz` keeps `gidx`), so training is unchanged.
+
 - T1: per-event ν-hit F1, **unweighted** median over events.
-- T2: AUC in-AV ν vs no-ν on events passing the 200 PE beam-flash cut (TN4).
+- T2: AUC in-AV ν vs no-ν on events passing the beam-flash cut (TN4: 200 PE; re-derived on val, audit #4).
 - T3: macro-F1 (as TN1).
-- T4: resolution on the truth-based clean subset (above).
+- T4: resolution on the truth-based clean subset: ν share ≥ 5%, visible fraction ≥ 0.3 (above).
 - T5: test MSE (log1p PE), total-PE resolution on ≥200 PE events.
 
 ## Paper Sec. 4 job plan (≤200 nh)
@@ -53,14 +58,15 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 
 ### Checklist
 
-- [ ] Step 0: multi-task fine-tune mode in `train_downstream` (all backbones)
-- [ ] Step 0: JEPA objective on qlfm backbone (+ embedding-rank monitor)
-- [ ] Step 0: PTv3 + Sonata + L (event-level cloud with PMT points)
-- [ ] Step 0: Mamba-2 + L (PMT prefix/suffix, masked-light loss)
-- [ ] Step 0: denser val logging; keep 2/5/10/20 nh checkpoints
+- [x] Step 0: audit fixes — #1 FM4NPP adapter trains when frozen; #2 `final_step`/`truncated` in metrics.json, `--resume 1` default; #3 random pretraining val subset; #5 token cap from checkpoint; #6 PTv3 inputs matched to pretraining views (`--pimm-prep`); #8 per-key loss averaging; #9 `best.pt` always written; #11 FM4NPP final-norm lr group; budget-mode warmup fixed (`--warmup-steps`). Still open: #4 light cut on val (with the metric scripts), #10 label-threshold note, #12 converter asserts
+- [x] Step 0: multi-task fine-tune (`qlfm/train_multitask.py`, all backbones; final checkpoint, per-task masked losses, running loss scale) — smoke-tested on qlfm-M CL/C, Panda, JEPA, Mamba-2 + L
+- [ ] Step 0: JEPA objective on qlfm backbone (`qlfm/models/jepa.py`, `--method jepa`) — runs, but the targets lose spread (partial collapse) in smoke tests; testing top-4-layer targets, target standardisation and a VICReg penalty
+- [x] Step 0: PTv3 + Sonata + L (`pimm_configs/panda_l_uboone.py`, `MicroBooNEEventLightDataset`, backbone `panda_l`) — smoke-tested: 0.5 s per 24-event batch
+- [x] Step 0: Mamba-2 + L (`qlfm/ref/fm4npp_light.py`, `--method fm4npp_l`, backbone `fm4npp_l`) — smoke-tested: 77 events/s, 19.5M params
+- [x] Step 0: denser val logging; snapshots at 10/25/50% of the run (`--keep-frac`)
 - [ ] Step 0: T4 truth-based subset definition; T1 unweighted per-event F1; T2 bright-sample AUC in the summary scripts
-- [ ] Step 1: smoke tests (30 min each; throughput → steps for 20 nh; resume after kill)
-- [ ] Step 2: pretraining qlfm-M CL 20 nh
+- [x] Step 1: smoke tests (jobs 7820550, 7820569, 7820581; 7820692 for JEPA variants)
+- [ ] Step 2: pretraining qlfm-M CL 20 nh — job 7820585 (preemptable, `pre/s4_m_cl_mae`, budget 19 h, snapshots 10/25/50%)
 - [ ] Step 2: pretraining qlfm-M CL JEPA 20 nh
 - [ ] Step 2: pretraining PTv3 + Sonata + L 20 nh
 - [ ] Step 2: pretraining Mamba-2 + L 20 nh
@@ -68,6 +74,7 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 - [ ] Step 3: frozen heads 0.1% / 1%
 - [ ] Step 3: multi-task FT 0.1% / 1% × 3 seeds; single-task FT qlfm-M CL 1%
 - [ ] Sec. 4 results into `paper-plan.tex`
+- [ ] Sec. 3: multi-task FT on the existing qlfm-M CL / C (+XF) / Panda (+XF) checkpoints — job 7820653 (`s3/mt`)
 
 ## Timeline (target)
 
@@ -84,3 +91,4 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 | Date | Item | nh |
 |---|---|---|
 | 2026-11-06 | preemptable smoke test of the new scripts (job 7820275) | 0.08 |
+| 2026-11-06 | code smoke tests (7820550, 7820569, 7820581, 7820692) | ≈5 (to be updated from `usage.sh`) |
