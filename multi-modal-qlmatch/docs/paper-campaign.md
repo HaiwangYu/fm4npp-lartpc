@@ -67,9 +67,9 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 - [ ] Step 0: T4 truth-based subset definition; T1 unweighted per-event F1; T2 bright-sample AUC in the summary scripts
 - [x] Step 1: smoke tests (jobs 7820550, 7820569, 7820581; 7820692 for JEPA variants)
 - [ ] Step 2: pretraining qlfm-M CL 20 nh — job 7820585 (preemptable, `pre/s4_m_cl_mae`, budget 19 h, snapshots 10/25/50%)
-- [ ] Step 2: pretraining qlfm-M CL JEPA 20 nh
-- [ ] Step 2: pretraining PTv3 + Sonata + L 20 nh
-- [ ] Step 2: pretraining Mamba-2 + L 20 nh
+- [ ] Step 2: pretraining qlfm-M CL JEPA 20 nh — waiting for the JEPA variant test (job 7820819: target standardisation, VICReg, cell-centre predictor positions)
+- [ ] Step 2: pretraining PTv3 + Sonata + L 20 nh — job 7820823 (`pre/s4_ptv3_l`, 3.28M events, snapshots every 5%)
+- [ ] Step 2: pretraining Mamba-2 + L 20 nh — job 7820822 (`pre/s4_mamba_l`, budget 19 h, snapshots 10/25/50%)
 - [ ] Step 3: probe curves
 - [ ] Step 3: frozen heads 0.1% / 1%
 - [ ] Step 3: multi-task FT 0.1% / 1% × 3 seeds; single-task FT qlfm-M CL 1%

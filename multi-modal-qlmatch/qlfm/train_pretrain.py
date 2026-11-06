@@ -69,6 +69,8 @@ def get_args(argv=None):
     ap.add_argument("--jepa-ema", type=float, default=0.996, help="JEPA: initial EMA momentum (cosine to 1)")
     ap.add_argument("--jepa-tnorm", type=int, default=0, help="JEPA: standardise targets per dimension")
     ap.add_argument("--jepa-vreg", type=float, default=0.0, help="JEPA: VICReg variance/covariance weight")
+    ap.add_argument("--jepa-pred-pos", default="centroid", choices=["centroid", "cell"],
+                    help="JEPA: position input of masked charge tokens to the predictor")
     ap.add_argument("--budget-h", type=float, default=None,
                     help="training-hour budget: after 200 steps the measured rate fixes --steps (kept on resume)")
     return ap.parse_args(argv)
@@ -94,7 +96,7 @@ def build(args):
     if args.method == "jepa":
         from qlfm.models.jepa import JEPA
         return fm, JEPA(fm, mcfg, momentum=(args.jepa_ema, 1.0), target_layers=args.jepa_layers,
-                        tnorm=bool(args.jepa_tnorm), vreg=args.jepa_vreg)
+                        tnorm=bool(args.jepa_tnorm), vreg=args.jepa_vreg, pred_pos=args.jepa_pred_pos)
     return fm, MAE(fm, mcfg)
 
 

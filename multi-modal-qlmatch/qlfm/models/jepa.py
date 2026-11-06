@@ -16,6 +16,9 @@ Option tnorm: targets standardised per dimension over the masked tokens of the b
 so near-constant target dimensions cannot make the loss small.
 Option vreg = w: VICReg (arXiv:2105.04906) variance hinge (std >= 1 per dimension) + covariance penalty on the
 context-encoder features, weight w; an explicit guard against (dimensional) collapse.
+Option pred_pos = "cell": the predictor gets only the cell centre of each masked charge token, not its
+charge-weighted centroid and in-cell offset (which describe where the token's charge is; Josh Peterson's audit #7),
+so a target cannot be inferred from its position input.
 """
 import copy
 import math
@@ -29,9 +32,9 @@ from qlfm.models.fm import MAE
 
 
 class JEPA(MAE):
-    def __init__(self, fm, cfg, momentum=(0.996, 1.0), target_layers=1, tnorm=False, vreg=0.0):
+    def __init__(self, fm, cfg, momentum=(0.996, 1.0), target_layers=1, tnorm=False, vreg=0.0, pred_pos="centroid"):
         super().__init__(fm, cfg)
-        self.target_layers, self.tnorm, self.vreg = target_layers, tnorm, vreg
+        self.target_layers, self.tnorm, self.vreg, self.pred_pos = target_layers, tnorm, vreg, pred_pos
         del self.head_c, self.head_l                            # no pixel-space targets
         self.head_p = nn.Linear(cfg.dec_d, fm.cfg.d)
         self.teacher = copy.deepcopy(fm)
@@ -79,7 +82,12 @@ class JEPA(MAE):
         dc = torch.empty(xc.shape[0], self.cfg.dec_d, device=xc.device, dtype=zc.dtype)
         dc[vis_c] = self.enc2dec(zc).to(dc.dtype)
         dc[mc] = self.mask_c.to(dc.dtype)
-        dc = dc + self.dec_pos_c(fm.charge.pos_embed(ct))
+        pe = fm.charge.pos_embed(ct)
+        if self.pred_pos == "cell":                     # masked tokens: cell centre only
+            ch = fm.charge
+            coarse = ch.plane(ct.tok_plane) + ch.pos(ct.tok_pos) + ch.crel(torch.zeros_like(ct.tok_crel))
+            pe = torch.where(mc[:, None], coarse.to(pe.dtype), pe)
+        dc = dc + self.dec_pos_c(pe)
         srcs, evts = [dc], [ct.tok_evt]
         if lt is not None:
             dl = torch.empty(xl.shape[0], self.cfg.dec_d, device=xl.device, dtype=zc.dtype)

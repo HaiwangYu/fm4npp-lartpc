@@ -27,7 +27,7 @@ use_wandb = False
 SCALE = 600.0
 grid_size = 0.3 / SCALE
 warmup_ratio = 0.05
-num_samples = 240_000            # events; placeholder, set with --options data.train.max_len=N from the smoke-test rate
+num_samples = 3_280_000          # events: smoke test 0.50 s per 24-event batch -> 19 h of training (20 nh budget)
 
 model = dict(
     type="Sonata-v1m1",
@@ -138,6 +138,8 @@ hooks = [   # as in the Panda config, minus wandb and the PILArNet-label Pretrai
     dict(type="IterationTimer", warmup_iter=2),
     dict(type="InformationWriter"),
     dict(type="CheckpointSaverIteration", save_freq=200),
+    # snapshots every 5 % of the run, kept (convergence probes at 10/25/50 %)
+    dict(type="CheckpointSaverIteration", save_freq=num_samples // batch_size // 20, save_iter_checkpoints=True),
     dict(type="PrototypeUsageLogger", log_frequency=50, prefix="prototypes"),
     dict(type="FeatureStdMonitor", log_frequency=50, prefix="feature_std", monitor_student=True, monitor_teacher=True,
          track_channels=False),
