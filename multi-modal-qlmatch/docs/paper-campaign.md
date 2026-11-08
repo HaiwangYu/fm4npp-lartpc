@@ -30,6 +30,7 @@ Tracking doc for the paper campaign (started 2026-11-06). GitHub issue: https://
 | 2026-11-06 | Josh's code audit (`audit-round1.md`, his fork) is fixed before any campaign run; his A1–A5 checks (survey-round1.5) go into paper Sec. 5. |
 | 2026-11-06 | Step-0 order: audit fixes → multi-task FT (tested on the existing qlfm-M CL / C checkpoints, also paper Sec. 3) → qlfm-M CL 20 nh → JEPA, PTv3 + L, Mamba-2 + L. |
 | 2026-11-06 | Venue: ICML 2027 main conference, Application-Driven ML area (deadline expected late Jan 2027). Fallbacks: ICML 2027 workshop, NeurIPS 2027 Datasets & Benchmarks, MLST. |
+| 2026-11-08 | Run the stable JEPA variant (target standardisation + cell-centre predictor positions) at 20 nh, although its tiny-scale T1 probe is half of MAE's; a hit-level gap is itself a Sec. 4 result. |
 
 ## Updated metrics (paper Sec. 3)
 
@@ -60,14 +61,14 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 
 - [x] Step 0: audit fixes — #1 FM4NPP adapter trains when frozen; #2 `final_step`/`truncated` in metrics.json, `--resume 1` default; #3 random pretraining val subset; #5 token cap from checkpoint; #6 PTv3 inputs matched to pretraining views (`--pimm-prep`); #8 per-key loss averaging; #9 `best.pt` always written; #11 FM4NPP final-norm lr group; budget-mode warmup fixed (`--warmup-steps`). Still open: #4 light cut on val (with the metric scripts), #10 label-threshold note, #12 converter asserts
 - [x] Step 0: multi-task fine-tune (`qlfm/train_multitask.py`, all backbones; final checkpoint, per-task masked losses, running loss scale) — smoke-tested on qlfm-M CL/C, Panda, JEPA, Mamba-2 + L
-- [ ] Step 0: JEPA objective on qlfm backbone (`qlfm/models/jepa.py`, `--method jepa`) — plain JEPA collapses (tgt_std 0.51→0.29, loss_c 0.004). Job 7820819 (1,600 steps, frozen probes, 1% labels, val): target standardisation + cell-centre predictor positions (`tncell`) keeps the spread (tgt_std 0.79, loss_c 0.035); T2 AUC 0.953 vs MAE 0.949, but T1 F1 0.092 vs MAE 0.177 (tn 0.054). Decision pending (see 2026-11-08 note)
+- [ ] Step 0: JEPA objective on qlfm backbone (`qlfm/models/jepa.py`, `--method jepa`) — plain JEPA collapses (tgt_std 0.51→0.29, loss_c 0.004). Job 7820819 (1,600 steps, frozen probes, 1% labels, val): target standardisation + cell-centre predictor positions (`tncell`) keeps the spread (tgt_std 0.79, loss_c 0.035); T2 AUC 0.953 vs MAE 0.949, but T1 F1 0.092 vs MAE 0.177 (tn 0.054). Run at 20 nh (2026-11-08)
 - [x] Step 0: PTv3 + Sonata + L (`pimm_configs/panda_l_uboone.py`, `MicroBooNEEventLightDataset`, backbone `panda_l`) — smoke-tested: 0.5 s per 24-event batch
 - [x] Step 0: Mamba-2 + L (`qlfm/ref/fm4npp_light.py`, `--method fm4npp_l`, backbone `fm4npp_l`) — smoke-tested: 77 events/s, 19.5M params
 - [x] Step 0: denser val logging; snapshots at 10/25/50% of the run (`--keep-frac`)
 - [ ] Step 0: T4 truth-based subset definition; T1 unweighted per-event F1; T2 bright-sample AUC in the summary scripts
 - [x] Step 1: smoke tests (jobs 7820550, 7820569, 7820581; 7820692 for JEPA variants)
 - [ ] Step 2: pretraining qlfm-M CL 20 nh — job 7820585 (preemptable, `pre/s4_m_cl_mae`, budget 19 h, snapshots 10/25/50%)
-- [ ] Step 2: pretraining qlfm-M CL JEPA 20 nh — waiting for the JEPA variant test (job 7820819: target standardisation, VICReg, cell-centre predictor positions)
+- [ ] Step 2: pretraining qlfm-M CL JEPA 20 nh — job 7828444 (`pre/s4_m_cl_jepa`, budget 19 h, snapshots 10/25/50%; top-4-layer targets, EMA 0.998, target standardisation, cell-centre predictor positions)
 - [ ] Step 2: pretraining PTv3 + Sonata + L 20 nh — job 7820823 (`pre/s4_ptv3_l`, 3.28M events, snapshots every 5%)
 - [ ] Step 2: pretraining Mamba-2 + L 20 nh — job 7820822 (`pre/s4_mamba_l`, budget 19 h, snapshots 10/25/50%)
 - [ ] Step 3: probe curves
