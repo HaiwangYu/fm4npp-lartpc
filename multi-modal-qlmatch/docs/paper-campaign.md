@@ -60,7 +60,7 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 
 - [x] Step 0: audit fixes — #1 FM4NPP adapter trains when frozen; #2 `final_step`/`truncated` in metrics.json, `--resume 1` default; #3 random pretraining val subset; #5 token cap from checkpoint; #6 PTv3 inputs matched to pretraining views (`--pimm-prep`); #8 per-key loss averaging; #9 `best.pt` always written; #11 FM4NPP final-norm lr group; budget-mode warmup fixed (`--warmup-steps`). Still open: #4 light cut on val (with the metric scripts), #10 label-threshold note, #12 converter asserts
 - [x] Step 0: multi-task fine-tune (`qlfm/train_multitask.py`, all backbones; final checkpoint, per-task masked losses, running loss scale) — smoke-tested on qlfm-M CL/C, Panda, JEPA, Mamba-2 + L
-- [ ] Step 0: JEPA objective on qlfm backbone (`qlfm/models/jepa.py`, `--method jepa`) — runs, but the targets lose spread (partial collapse) in smoke tests; testing top-4-layer targets, target standardisation and a VICReg penalty
+- [ ] Step 0: JEPA objective on qlfm backbone (`qlfm/models/jepa.py`, `--method jepa`) — plain JEPA collapses (tgt_std 0.51→0.29, loss_c 0.004). Job 7820819 (1,600 steps, frozen probes, 1% labels, val): target standardisation + cell-centre predictor positions (`tncell`) keeps the spread (tgt_std 0.79, loss_c 0.035); T2 AUC 0.953 vs MAE 0.949, but T1 F1 0.092 vs MAE 0.177 (tn 0.054). Decision pending (see 2026-11-08 note)
 - [x] Step 0: PTv3 + Sonata + L (`pimm_configs/panda_l_uboone.py`, `MicroBooNEEventLightDataset`, backbone `panda_l`) — smoke-tested: 0.5 s per 24-event batch
 - [x] Step 0: Mamba-2 + L (`qlfm/ref/fm4npp_light.py`, `--method fm4npp_l`, backbone `fm4npp_l`) — smoke-tested: 77 events/s, 19.5M params
 - [x] Step 0: denser val logging; snapshots at 10/25/50% of the run (`--keep-frac`)
@@ -74,7 +74,7 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 - [ ] Step 3: frozen heads 0.1% / 1%
 - [ ] Step 3: multi-task FT 0.1% / 1% × 3 seeds; single-task FT qlfm-M CL 1%
 - [ ] Sec. 4 results into `paper-plan.tex`
-- [ ] Sec. 3: multi-task FT on the existing qlfm-M CL / C (+XF) / Panda (+XF) checkpoints — job 7820653 (`s3/mt`)
+- [x] Sec. 3: multi-task FT on the existing qlfm-M CL / C (+XF) / Panda (+XF) checkpoints — job 7820653 (`s3/mt`), 12 runs done (results below)
 
 ## Timeline (target)
 
@@ -86,9 +86,27 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 | 14 Dec – 10 Jan | Sec. 3 updates (metrics, multi-task FT), Sec. 5 |
 | 11–27 Jan | writing; ICML deadline |
 
+## Sec. 3 multi-task results (job 7820653, test, final checkpoint; T2 on all events, old metric definitions)
+
+| backbone | mode | labels | T1 F1 ↑ | T2 AUC ↑ | T3 F1 ↑ | T4 res ↓ | T5 MSE ↓ |
+|---|---|---|---|---|---|---|---|
+| qlfm-M CL | finetune | 1% (3 seeds) | 0.918 ± 0.001 | 0.993 | 0.748 | 0.269 | 0.529 |
+| qlfm-M C + XF | finetune | 1% (3 seeds) | 0.859 ± 0.002 | 0.990 | 0.685 | 0.322 | 0.584 |
+| PTv3 + Sonata + XF | finetune | 1% | 0.839 | 0.988 | 0.789 | 0.261 | 0.592 |
+| qlfm-M CL | finetune | 0.1% | 0.879 | 0.985 | 0.658 | 0.338 | 0.642 |
+| qlfm-M C + XF | finetune | 0.1% | 0.633 | 0.915 | 0.490 | 0.364 | 0.792 |
+| qlfm-M CL | frozen | 1% | 0.894 | 0.997 | 0.687 | 0.307 | 0.521 |
+| qlfm-M C + XF | frozen | 1% | 0.721 | 0.984 | 0.642 | 0.350 | 0.657 |
+| PTv3 + Sonata + XF | frozen | 1% | 0.740 | 0.990 | 0.756 | 0.300 | 0.635 |
+
+The Mamba-2 + L multi-task fine-tune smoke test ran out of GPU memory (bs 32, 40 GB) and `run_queue.sh` retried it until the job ended (≈7 nh lost). Fixed: tasks that exit with an error are logged to `DIR.fails` and skipped after `MAX_FAIL=2` errors. Mamba-2 + L fine-tuning needs a smaller batch with gradient accumulation.
+
 ## Node-hour ledger
 
 | Date | Item | nh |
 |---|---|---|
 | 2026-11-06 | preemptable smoke test of the new scripts (job 7820275) | 0.08 |
-| 2026-11-06 | code smoke tests (7820550, 7820569, 7820581, 7820692) | ≈5 (to be updated from `usage.sh`) |
+| 2026-11-06 | code smoke tests (7820550, 7820569, 7820581, 7820692) | 1.8 |
+| 2026-11-07 | JEPA variant test + probes (7820819, 3 nodes) | 1.6 |
+| 2026-11-07 | Sec. 3 multi-task FT (7820653; ≈2 nh of work, ≈7 nh lost to the OOM retry loop) | 9.2 |
+| | **total so far** | **12.7** |

@@ -4,11 +4,14 @@
 # so several jobs can share one task file. Tasks that cannot finish before DEADLINE are left for later jobs.
 # A lock records its owner (RUN_ID = jobid@start) and a heartbeat. A lock is stale, and is reclaimed, when its
 # heartbeat is older than STALE_MIN (job killed, e.g. preempted) or it belongs to an earlier run of this same job (rerun).
+# A task that exits with an error (not the deadline timeout) is logged to DIR.fails and skipped after MAX_FAIL errors
+# (delete DIR.fails to retry it).
 # Usage (inside PBS): mpiexec -n NNODES --ppn 1 env RUN_ID=... bash run_queue.sh TASKFILE DEADLINE_EPOCH
 source /lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc/multi-modal-qlmatch/scripts/env.sh
 TASKS=$1; DEADLINE=$2
 RUN_ID=${RUN_ID:-${PBS_JOBID%%.*}@0}
 STALE_MIN=${STALE_MIN:-15}
+MAX_FAIL=${MAX_FAIL:-2}
 claim() {   # claim() LOCKDIR: 0 if we now own it
   local lk=$1
   mkdir $lk 2>/dev/null && { echo "$RUN_ID $(hostname)" > $lk/owner; return 0; }
@@ -32,6 +35,7 @@ worker() {
       [ -z "$line" ] && continue
       local out=$(echo "$line" | sed -E 's/.*--out ([^ ]+).*/\1/')
       [ -f $out/metrics.json ] && continue
+      [ $(cat $out.fails 2>/dev/null | wc -l) -ge $MAX_FAIL ] && continue
       local left=$(( (DEADLINE - $(/bin/date +%s)) / 60 - 3 ))
       [ $left -lt 10 ] && return
       # long runs (large label budgets, encoder trained) need a fresh slot
@@ -48,7 +52,12 @@ worker() {
       esac
       ( while sleep 120; do touch $out.lock/owner; done ) & local hb=$!; disown $hb
       CUDA_VISIBLE_DEVICES=$gpu PIMM_ROOT=$QLFM_WORK/tools/pimm timeout $((left*60)) $py -m $cmd --time-limit $((left-5)) > $out/run.log 2>&1
+      local rc=$?
       kill $hb 2>/dev/null
+      if [ $rc -ne 0 ] && [ $rc -ne 124 ] && [ ! -f $out/metrics.json ]; then
+        echo "$RUN_ID gpu$gpu $(/bin/date +%F_%T) rc=$rc" >> $out.fails
+        echo "[$(hostname) gpu$gpu $(/bin/date +%T)] FAILED rc=$rc $out ($(wc -l < $out.fails)/$MAX_FAIL)"
+      fi
       rm -rf $out.lock
       ran=1
     done < $TASKS
