@@ -13,6 +13,10 @@ light are untouched:
       diff  diffusion only, published D_L (data 3.74, sim 6.40 cm2/s), sigma0^2 = 1.9 us^2:
             f = sqrt((s0 + 2 D_data t) / (s0 + 2 D_sim t)), t = drift time (1.00 -> 0.88 at the cathode)
   * charge: hit_q *= 1 + eps, eps = +-0.02, +-0.05 (MicroBooNE WireMod)
+  Controls (is a drop specific to the data/sim mismatch, or any change of width?):
+      w_inv       simulated widths divided by the measured factor (sim made broader, away from data)
+      w_c98/c95   simulated widths times a constant 0.98 / 0.95 (no drift dependence)
+      w_meas_all  measured factor applied to every hit, real cosmics included (relative sim/data width unchanged)
 Only qlfm reads hit width (its hit encoder; also the "raw" hit adapter); PTv3, PolarMAE and FM4NPP see charge and
 position only, so a width-only variant must leave them unchanged.
 Metrics are computed with the unperturbed hit charge (T1 is charge-weighted). Uncertainties: bootstrap over test
@@ -43,7 +47,8 @@ D_DATA, D_SIM, S0_US2 = 3.74e-6, 6.40e-6, 1.9                    # cm2/us, cm2/u
 
 VARIANTS = {"nominal": (None, 0.0), "w_meas": ("meas", 0.0), "w_diff": ("diff", 0.0),
             "q-5": (None, -0.05), "q-2": (None, -0.02), "q+2": (None, 0.02), "q+5": (None, 0.05),
-            "w_meas_q-5": ("meas", -0.05), "w_meas_q+5": ("meas", 0.05)}
+            "w_meas_q-5": ("meas", -0.05), "w_meas_q+5": ("meas", 0.05),
+            "w_inv": ("inv", 0.0), "w_c98": ("c0.98", 0.0), "w_c95": ("c0.95", 0.0), "w_meas_all": ("meas_all", 0.0)}
 
 
 def _interp(x, xp, fp):
@@ -55,6 +60,10 @@ def _interp(x, xp, fp):
 
 def width_factor(plane, tick, kind):
     d = tick.float() - ANODE_TICK
+    if kind == "inv":
+        return 1 / width_factor(plane, tick, "meas")
+    if kind.startswith("c"):
+        return torch.full_like(d, float(kind[1:]))
     if kind == "meas":
         xp = torch.tensor(D_C, device=tick.device)
         f = torch.ones_like(d)
@@ -76,8 +85,8 @@ def perturb(b, variant, sim_edep):
     b = dict(b)
     sim = b["hit_nu_edep"] > sim_edep
     if width is not None:
-        f = width_factor(b["hit_plane"], b["hit_time"], width)
-        b["hit_rms"] = torch.where(sim, b["hit_rms"] * f, b["hit_rms"])
+        f = width_factor(b["hit_plane"], b["hit_time"], width.removesuffix("_all"))
+        b["hit_rms"] = b["hit_rms"] * f if width.endswith("_all") else torch.where(sim, b["hit_rms"] * f, b["hit_rms"])
     if eps:
         b["hit_q"] = torch.where(sim, b["hit_q"] * (1 + eps), b["hit_q"])
     return b
