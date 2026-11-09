@@ -31,6 +31,7 @@ Tracking doc for the paper campaign (started 2026-11-06). GitHub issue: https://
 | 2026-11-06 | Step-0 order: audit fixes → multi-task FT (tested on the existing qlfm-M CL / C checkpoints, also paper Sec. 3) → qlfm-M CL 20 nh → JEPA, PTv3 + L, Mamba-2 + L. |
 | 2026-11-06 | Venue: ICML 2027 main conference, Application-Driven ML area (deadline expected late Jan 2027). Fallbacks: ICML 2027 workshop, NeurIPS 2027 Datasets & Benchmarks, MLST. |
 | 2026-11-08 | Run the stable JEPA variant (target standardisation + cell-centre predictor positions) at 20 nh, although its tiny-scale T1 probe is half of MAE's; a hit-level gap is itself a Sec. 4 result. |
+| 2026-11-09 | **Direction change:** architecture scan (ME2, Sec. 4) on hold; its 4 queued pretraining jobs deleted before starting. Focus: ME1 (Sec. 3, light in pretraining wins, existing models; #8) and Sunny's A1 data/sim rescaling test (charge side, no retraining; #9), in parallel. |
 
 ## Updated metrics (paper Sec. 3)
 
@@ -42,7 +43,7 @@ Applied to saved test predictions (`preds_test.npz` keeps `gidx`), so training i
 - T4: resolution on the truth-based clean subset: ν share ≥ 5%, visible fraction ≥ 0.3 (above).
 - T5: test MSE (log1p PE), total-PE resolution on ≥200 PE events.
 
-## Paper Sec. 4 job plan (≤200 nh)
+## Paper Sec. 4 job plan (≤200 nh) — ON HOLD since 2026-11-09
 
 Recipes (≈20M parameters, light in pretraining):
 
@@ -67,10 +68,10 @@ Budget (nh): code + smoke 13 · pretraining 4 × 20 = 80 · probe curve 6 · fro
 - [x] Step 0: denser val logging; snapshots at 10/25/50% of the run (`--keep-frac`)
 - [ ] Step 0: T4 truth-based subset definition; T1 unweighted per-event F1; T2 bright-sample AUC in the summary scripts
 - [x] Step 1: smoke tests (jobs 7820550, 7820569, 7820581; 7820692 for JEPA variants)
-- [ ] Step 2: pretraining qlfm-M CL 20 nh — job 7820585 (preemptable, `pre/s4_m_cl_mae`, budget 19 h, snapshots 10/25/50%)
-- [ ] Step 2: pretraining qlfm-M CL JEPA 20 nh — job 7828444 (`pre/s4_m_cl_jepa`, budget 19 h, snapshots 10/25/50%; top-4-layer targets, EMA 0.998, target standardisation, cell-centre predictor positions)
-- [ ] Step 2: pretraining PTv3 + Sonata + L 20 nh — job 7820823 (`pre/s4_ptv3_l`, 3.28M events, snapshots every 5%)
-- [ ] Step 2: pretraining Mamba-2 + L 20 nh — job 7820822 (`pre/s4_mamba_l`, budget 19 h, snapshots 10/25/50%)
+- [ ] (on hold) Step 2: pretraining qlfm-M CL 20 nh — job 7820585 deleted (preemptable, `pre/s4_m_cl_mae`, budget 19 h, snapshots 10/25/50%)
+- [ ] (on hold) Step 2: pretraining qlfm-M CL JEPA 20 nh — job 7828444 deleted (`pre/s4_m_cl_jepa`, budget 19 h, snapshots 10/25/50%; top-4-layer targets, EMA 0.998, target standardisation, cell-centre predictor positions)
+- [ ] (on hold) Step 2: pretraining PTv3 + Sonata + L 20 nh — job 7820823 deleted (`pre/s4_ptv3_l`, 3.28M events, snapshots every 5%)
+- [ ] (on hold) Step 2: pretraining Mamba-2 + L 20 nh — job 7820822 deleted (`pre/s4_mamba_l`, budget 19 h, snapshots 10/25/50%)
 - [ ] Step 3: probe curves
 - [ ] Step 3: frozen heads 0.1% / 1%
 - [ ] Step 3: multi-task FT 0.1% / 1% × 3 seeds; single-task FT qlfm-M CL 1%
