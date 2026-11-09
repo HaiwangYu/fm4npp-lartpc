@@ -81,19 +81,25 @@ def truth():
     return _truth
 
 
-def t1(r, thr=0.5):
-    """r: hit preds (pred, hit_tgt, hit_q, hit_evt). Per-event unweighted F1 (events with no true and no selected
-    hit are skipped), median and mean; plus the charge-weighted global F1."""
-    sel, t = r["pred"] > thr, r["hit_tgt"].astype(bool)
-    ev, e = np.unique(r["hit_evt"], return_inverse=True)
-    n = len(ev)
-    tp, nt, ns = (np.bincount(e, w.astype(np.float64), n) for w in (sel & t, t, sel))
+def t1(z, thr=0.5):
+    """z: hit preds (pred, hit_tgt, hit_q, hit_evt; an npz is read one column at a time, ~3 GB for 160M hits).
+    Per-event unweighted F1 (events with no true and no selected hit are skipped), median and mean; plus the
+    charge-weighted global F1 (as qlfm.evaluate.hit_metrics)."""
+    sel = z["pred"] > thr
+    t = z["hit_tgt"].astype(bool)
+    ev = z["gidx"] if "gidx" in z else None
+    he = z["hit_evt"]
+    e = (np.searchsorted(ev, he) if ev is not None else np.unique(he, return_inverse=True)[1]).astype(np.int32)
+    del he
+    n = int(e.max()) + 1
+    tp, nt, ns = (np.bincount(e, w, n).astype(np.float64) for w in (sel & t, t, sel))
     ok = nt + ns > 0
     f1 = 2 * tp[ok] / (nt[ok] + ns[ok])
-    out = dict(score=float(np.median(f1)), f1_evt_med=float(np.median(f1)), f1_evt_mean=float(f1.mean()),
-               n_events=int(ok.sum()), n_no_true=int((nt == 0).sum()))
-    out["f1_q"] = metrics_for("hit", r)["f1_q"]
-    return out
+    q = z["hit_q"].clip(min=0)
+    tpq, ntq, nsq = (q * (sel & t)).sum(dtype=np.float64), (q * t).sum(dtype=np.float64), (q * sel).sum(dtype=np.float64)
+    eff, pur = tpq / max(ntq, 1e-9), tpq / max(nsq, 1e-9)
+    return dict(score=float(np.median(f1)), f1_evt_med=float(np.median(f1)), f1_evt_mean=float(f1.mean()),
+                n_events=int(ok.sum()), n_no_true=int((nt == 0).sum()), f1_q=float(2 * eff * pur / max(eff + pur, 1e-9)))
 
 
 def t2(r):
@@ -147,8 +153,7 @@ def run_metrics(run, refresh=False):
         f = os.path.join(run, t, "preds_test.npz") if "tasks" in a else os.path.join(run, "preds_test.npz")
         if t not in out and os.path.exists(f):
             z = np.load(f)
-            out[t] = paper_metrics(t, {k: z[k] for k in z.files if k != "hit_pnd"})
-            del z
+            out[t] = t1(z) if t == "hit" else paper_metrics(t, {k: z[k] for k in z.files})
             json.dump(out, open(cache + ".tmp", "w"), indent=1)
             os.replace(cache + ".tmp", cache)
     return out

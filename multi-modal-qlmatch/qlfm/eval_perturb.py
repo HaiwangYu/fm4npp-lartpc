@@ -17,6 +17,7 @@ light are untouched:
       w_inv       simulated widths divided by the measured factor (sim made broader, away from data)
       w_c98/c95   simulated widths times a constant 0.98 / 0.95 (no drift dependence)
       w_meas_all  measured factor applied to every hit, real cosmics included (relative sim/data width unchanged)
+      w_const     every hit's width set to WIDTH_CONST (width carries no information)
 Only qlfm reads hit width (its hit encoder; also the "raw" hit adapter); PTv3, PolarMAE and FM4NPP see charge and
 position only, so a width-only variant must leave them unchanged.
 Metrics are computed with the unperturbed hit charge (T1 is charge-weighted). Uncertainties: bootstrap over test
@@ -44,11 +45,13 @@ F_MEAS = {2: [1.000, 0.972, 0.951, 0.936, 0.927, 0.919],         # Y
           0: [1.000, 0.969, 0.936, 0.916, 0.901, 0.895]}         # U (provisional)
 US_PER_TICK, V_DRIFT_CM_US, MAX_DRIFT_CM = 0.5, 0.1098, 256.35
 D_DATA, D_SIM, S0_US2 = 3.74e-6, 6.40e-6, 1.9                    # cm2/us, cm2/us, us2
+WIDTH_CONST = 4.0                                                # ticks, about the median hit rms
 
 VARIANTS = {"nominal": (None, 0.0), "w_meas": ("meas", 0.0), "w_diff": ("diff", 0.0),
             "q-5": (None, -0.05), "q-2": (None, -0.02), "q+2": (None, 0.02), "q+5": (None, 0.05),
             "w_meas_q-5": ("meas", -0.05), "w_meas_q+5": ("meas", 0.05),
-            "w_inv": ("inv", 0.0), "w_c98": ("c0.98", 0.0), "w_c95": ("c0.95", 0.0), "w_meas_all": ("meas_all", 0.0)}
+            "w_inv": ("inv", 0.0), "w_c98": ("c0.98", 0.0), "w_c95": ("c0.95", 0.0), "w_meas_all": ("meas_all", 0.0),
+            "w_const": ("const", 0.0)}
 
 
 def _interp(x, xp, fp):
@@ -84,7 +87,9 @@ def perturb(b, variant, sim_edep):
         return b
     b = dict(b)
     sim = b["hit_nu_edep"] > sim_edep
-    if width is not None:
+    if width == "const":
+        b["hit_rms"] = torch.full_like(b["hit_rms"], WIDTH_CONST)
+    elif width is not None:
         f = width_factor(b["hit_plane"], b["hit_time"], width.removesuffix("_all"))
         b["hit_rms"] = b["hit_rms"] * f if width.endswith("_all") else torch.where(sim, b["hit_rms"] * f, b["hit_rms"])
     if eps:
@@ -176,6 +181,7 @@ def load_run(run, dev):
     backbone = build_backbone(ns.backbone, ns, ns.fm if ns.mode != "scratch" else None)
     if multitask:
         model = MultiTaskModel(backbone, list(a["tasks"]), ns.mode, ns.late_light, ns.hit_feat)
+        model.width = a.get("width", "native")       # widths the model was trained with (applied in its forward)
     else:
         model = DownstreamModel(backbone, ns.task, ns.mode, ns.late_light, ns.hit_feat)
     model = model.to(dev)

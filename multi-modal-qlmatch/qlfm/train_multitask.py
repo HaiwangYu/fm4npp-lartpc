@@ -45,6 +45,9 @@ def get_args(argv=None):
     ap.add_argument("--late-light", type=int, default=0, help="as train_downstream (2 = strong late fusion)")
     ap.add_argument("--hit-feat", default="native", choices=["native", "raw", "none"])
     ap.add_argument("--pimm-prep", default="matched", choices=["matched", "legacy"])
+    ap.add_argument("--width", default="native", choices=["native", "meas", "const"],
+                    help="hit widths in training and evaluation (#9): meas = simulated nu hits rescaled to data "
+                         "(qlfm.eval_perturb w_meas), const = every hit the same width (no width information)")
     ap.add_argument("--max-hits", type=int, default=None)
     ap.add_argument("--max-tokens", type=int, default=None)
     ap.add_argument("--label-frac", type=float, default=0.01)
@@ -113,6 +116,9 @@ class MultiTaskModel(nn.Module):
             return self.backbone(b)
 
     def forward(self, b):
+        if getattr(self, "width", "native") != "native":
+            from qlfm.eval_perturb import perturb
+            b = perturb(b, "w_" + self.width, 0.0)
         out = {}
         need_main = any(t != "light" for t in self.tasks)
         if need_main or not self.light_off_pass:
@@ -246,6 +252,7 @@ def main(argv=None):
 
     backbone = build_backbone(args.backbone, args, args.fm)
     model = MultiTaskModel(backbone, tasks, args.mode, args.late_light, args.hit_feat).to(dev)
+    model.width = args.width
     if args.mode == "frozen":
         for n_, p in backbone.named_parameters():
             p.requires_grad_("adapter_" in n_)
