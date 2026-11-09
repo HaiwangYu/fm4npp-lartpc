@@ -43,6 +43,21 @@ Applied to saved test predictions (`preds_test.npz` keeps `gidx`), so training i
 - T4: resolution on the truth-based clean subset: ν share ≥ 5%, visible fraction ≥ 0.3 (above).
 - T5: test MSE (log1p PE), total-PE resolution on ≥200 PE events.
 
+Implemented in `qlfm/paper_metrics.py` (2026-11-09). The light cut chosen on val is 200 PE (val optimum 237), the same as round 4's test-chosen cut, so audit #4 changes nothing. The T4 clean subset keeps 62% of the T4 test events. Existing multi-task runs (`s3/mt`, nominal widths, test; T1 = per-event median F1; T2 = bright AUC; T4 = clean resolution ↓; T5 = MSE ↓):
+
+| run | T1 | T2 | T3 | T4 | T5 |
+|---|---|---|---|---|---|
+| qlfm-M CL FT 1% (3 seeds) | 0.922 | 0.988 | 0.748 | 0.225 | 0.529 |
+| qlfm-M C + XF FT 1% (3 seeds) | 0.862 | 0.969 | 0.685 | 0.283 | 0.584 |
+| PTv3 + XF FT 1% (1 seed) | 0.831 | 0.976 | 0.789 | 0.227 | 0.592 |
+| qlfm-M CL frozen 1% | 0.894 | 0.989 | 0.687 | 0.256 | 0.521 |
+| qlfm-M C + XF frozen 1% | 0.663 | 0.943 | 0.642 | 0.301 | 0.657 |
+| PTv3 + XF frozen 1% | 0.695 | 0.972 | 0.756 | 0.259 | 0.635 |
+| qlfm-M CL FT 0.1% | 0.886 | 0.971 | 0.658 | 0.293 | 0.642 |
+| qlfm-M C + XF FT 0.1% | 0.558 | 0.778 | 0.490 | 0.317 | 0.792 |
+
+Caveat (A1, #9): qlfm's T1/T2 depend on the simulated hit width; these are nominal-width numbers.
+
 ## Paper Sec. 4 job plan (≤200 nh) — ON HOLD since 2026-11-09
 
 Recipes (≈20M parameters, light in pretraining):
