@@ -111,4 +111,5 @@ The Mamba-2 + L multi-task fine-tune smoke test ran out of GPU memory (bs 32, 40
 | 2026-11-06 | code smoke tests (7820550, 7820569, 7820581, 7820692) | 1.8 |
 | 2026-11-07 | JEPA variant test + probes (7820819, 3 nodes) | 1.6 |
 | 2026-11-07 | Sec. 3 multi-task FT (7820653; ≈2 nh of work, ≈7 nh lost to the OOM retry loop) | 9.2 |
-| | **total so far** | **12.7** |
+| 2026-11-09 | A1 data/sim width + charge test (#9): smoke 7831006 (0.17), full grid 7831163 (2 × 0.82) | 1.8 |
+| | **total so far** | **14.5** |
