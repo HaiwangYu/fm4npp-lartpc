@@ -234,7 +234,60 @@ Other related definitions exist (e.g. `data_bnb_optfilter_C1_5e19_goodruns_mcc9.
 A data job fcl plus a small `isRealData()` guard in the module should be enough. Test it on one
 prestaged C1 beam-good file and one EXT file.
 
-## 4. Open items
+## 4. Wire-Cell neutrino selection at hit level
+
+Goal for the first round (decided 2026-11-11): four samples of about 1000 events each.
+- BNB ν overlay and intrinsic ν_e overlay: events shared by the open data and the WC checkout.
+- Beam-on BNB and beam-off EXT data.
+
+Each gets the WC neutrino selection at event level and, if possible, at hit level.
+
+### 4.1 Where WC hit-level information lives
+- The **checkout files are pruned**: only the five event-level trees, in every run (run1, run3,
+  run4b, run5 checked). The `T_PFeval` reco particles (`reco_startXYZT`/`reco_endXYZT`) are
+  the finest WC info there.
+- The WC chain for run1 is reco1 → celltree → WCP imaging, matching and nu selection (outside art)
+  → the **`nusel*_WCP_*.root`** file → port into art (**reco1.5**,
+  `ubreco/WcpPortedReco/ProducePort/job/run_slimmed_port_{overlay,data}.fcl`) → wirecell reco2 →
+  checkout. The nusel files are what the port reads as `./merge.root`, and they are kept in samweb
+  as data tier `celltree`.
+- From the port modules (`PortedHits_module.cc`, `PortedSpacePoints_module.cc`), the nusel files
+  contain:
+  - `T_port_2d`: run, subrun, event, `channel` (0-8255), `start_tick` (4-tick bins, offset 2400),
+    `charge`, `charge_error`, **`main_flag`**. This is 2D, hit-like deconvolved charge with the
+    neutrino-candidate (in-beam, flash-matched) cluster flag.
+  - `T_port_3d`: `x,y,z,q,nq`, `time_slice`, `ch_u/ch_v/ch_w`, **`main_flag`**. These are 3D space
+    points with their wire/time projection already attached.
+  - `T_eval` (and the other selection trees).
+- The art products in reco1.5 (`portedThresholdhit`: `recob::Hit`; `portedSpacePointsThreshold`:
+  `recob::SpacePoint`) **drop `main_flag`** and keep every cluster, so the nu/cosmic split is lost
+  there. Use the nusel ROOT files directly. (Newer productions also port `Trec`/`Tcluster` space
+  points with cluster IDs, and `WireCellAnaTree` has `SaveT*SpacePoints` options, but the run1
+  productions were run without them.)
+- Proposed hit label: a gaushit is WC-ν if its (plane, wire, peak tick) falls in a `T_port_2d` bin
+  with `main_flag == 1` **and** the event passes the WC generic ν selection in `T_eval`.
+  Otherwise it is WC-cosmic. The tick convention (offset 2400, 4-tick bins) has to be checked on a
+  real file, and so does whether `T_port_2d` holds all clusters or only some.
+
+### 4.2 samweb definitions of the WC outputs (all on tape, NEARLINE)
+
+| Sample | nusel (`celltree` tier) definition | Files | Events | Size |
+|---|---|---|---|---|
+| BNB ν overlay run1 | `prodgenie_bnb_nu_uboone_overlay_mcc9.0_run1_wcp_reco1.5_v08_00_00_29_reco1.5_celltree` | 25,065 | 1,072,287 | 4.05 TB |
+| ν_e overlay run1 | `prodgenie_bnb_intrinsic_nue_uboone_overlay_mcc9.0_run1_wcp_reco1.5_v08_00_00_29_reco1.5_celltree` | 4,713 | 197,911 | 0.99 TB |
+| Beam-on C1 | `data_bnb_mcc9.1_wcp_port_TEST_v08_00_00_28_reco1.5_C1_celltree` | 64,556 | 727,390 | 2.62 TB |
+| EXT C1 | `data_extbnb_mcc9.1_wcp_port_TEST_v08_00_00_28_reco1.5_C1_celltree` | 30,006 | 471,872 | 1.64 TB |
+| EXT C2 | `data_extbnb_mcc9.1_wcp_port_TEST_v08_00_00_28_reco1.5_C2_celltree` | 29,252 | 516,981 | 1.82 TB |
+
+The matching `..._reco1.5` definitions hold the ported art files. To find the WC file for a given
+reco2 file: its samweb parent (the reco1 file), then that parent's `nusel*_WCP_*` child whose
+`ub_project.name` is the production above. Checked on a public ν_e file.
+
+### 4.3 ν_e overlap
+For 60 random public ν_e files (2,364 events), 1,085 (45.9%) are in
+`checkout_prodgenie_bnb_intrinsic_nue_overlay_run1.root`, with 96 of 219 subruns in its `T_pot`.
+
+## 5. Open items
 - [x] Full event-ID dump of all 24,436 public artroot files: 557,568 events shared with WC run1
       overlay (§2.2).
 - [x] Event IDs from the open-data HDF5 `event_table` (read from Zenodo): 402,231 HDF5 events in
