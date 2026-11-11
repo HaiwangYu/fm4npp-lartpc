@@ -1,6 +1,6 @@
 # MicroBooNE data curation: input tier, Wire-Cell overlap, real-data inputs
 
-Status 2026-11-11. Tracking issue: see the GitHub issue "MicroBooNE data curation".
+Status 2026-11-11. Tracking issue: [#10](https://github.com/HaiwangYu/fm4npp-lartpc/issues/10).
 
 So far the project has trained on the MicroBooNE open-data HDF5 (Zenodo
 [8370883](https://zenodo.org/records/8370883), inclusive BNB overlay, NoWire; and
