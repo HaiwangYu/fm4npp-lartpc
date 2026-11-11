@@ -58,9 +58,18 @@ Notes:
   for the light inputs.
 - reco1 files alone would lack `pandora` and `flashmatch`. HDF5Maker only needs those for the
   Pandora tables and T0, so the core hit/flash tables could be made from reco1.
-- Open: the public HDF5 has 753,467 events, against 1,046,139 in the artroot (72%). The reason
-  is not documented. Comparing the HDF5 `event_table` IDs with a full artroot ID dump would
-  show which events were dropped (see §4).
+- The public HDF5 has 753,467 events, against 1,046,139 in the artroot (72.0%). A full ID dump of
+  all 24,436 artroot files (165 have no events) and of the `event_table` of all 18 HDF5 files shows:
+  - every HDF5 event is in the artroot, with no duplicates;
+  - **whole files are in or out**: 17,468 artroot files are fully in the HDF5, 6,803 are fully
+    missing, none partly (and likewise 54,392 subruns fully in, 21,459 fully out);
+  - the missing files are spread evenly over the list (69-75% kept in every block of 1,000), have
+    the same mean events per file (43.0 vs 43.1) and the same `PhysicsRun`/`BeamOffRun` mix.
+
+  So the loss looks like random whole-file loss (failed jobs, or a random subsample), not an event
+  selection. Converting the full list would add about 293k events.
+- The nue HDF5 (Zenodo 7261921, 20 files, 89,339 events) holds every event of its 2,151 artroot
+  files (2,133 non-empty).
 
 ## 2. Overlap with the Wire-Cell checkout files
 
@@ -95,9 +104,30 @@ The overlap is by whole subruns:
 - No subrun outside `T_pot` has any match.
 - Where checked, the event count per subrun is identical on both sides.
 
-So these are the same events, not chance ID collisions. Scaling 52.7% to the 1.05M public events
-gives roughly 550k events in common. That would be most of the 582k WC events, but the full
-count has not been made (§4).
+So these are the same events, not chance ID collisions.
+
+**Full count** (all 24,436 artroot files, all 18 HDF5 files, `checkout_prodgenie_bnb_nu_overlay_run1.root`):
+
+| Event set | Events | Also in WC | Also in published HDF5 |
+|---|---|---|---|
+| Public artroot | 1,046,139 | 557,568 (53.3%) | 753,467 (72.0%) |
+| Published HDF5 (what we train on) | 753,467 | **402,231 (53.4%)** | - |
+| WC `T_eval` | 581,941 | - | 402,231 (69.1%) |
+
+- 557,568 of the 581,941 WC events (95.8%) are in the public artroot. The other 24,373 are not.
+- Of the WC events in the artroot, 155,337 sit in the files missing from the published HDF5.
+  Converting the full list ourselves would raise the WC-comparable set from 402k to 558k events.
+- Truth check on the 402,231 shared events: HDF5 `nu_energy` (GeV) × 1000 equals WC
+  `truth_nuEnergy` (MeV) for all of them (median difference 0), and `nu_pdg` and `is_cc` agree
+  100%. The matched events are the same simulated interactions.
+
+Intrinsic nue (`checkout_prodgenie_bnb_intrinsic_nue_overlay_run1{,_PF}.root`, 68,203 events):
+29,337 shared with the public nue HDF5 (32.8% of its 89,339 events, 43.0% of WC). Truth agrees
+100%. The `_LowE` WC samples share no events with the public files.
+
+How the HDF5 IDs were read: `event_table` straight from Zenodo with HTTP range requests
+(`h5py.File(fsspec.filesystem("http").open(url, block_size=4<<20))`, about 35 s per file; run one
+file at a time, since parallel requests get HTTP 429).
 
 The overlay event IDs carry the run number of the overlaid EXT data (e.g. run 7419). The
 public file names start with the EXT file name.
@@ -127,6 +157,10 @@ For 40 random files of each samweb reco2 definition, the share of their subruns 
 | `data_extbnb_mcc9.1_v08_00_00_25_reco2_C1_all_reco2` vs `checkout_data_extbnb_run1_PF` | 1280/2208 (58%) |
 | `data_extbnb_mcc9.1_v08_00_00_25_reco2_C2_all_reco2` vs `checkout_data_extbnb_run1_PF` | 955/1923 (50%) |
 
+In the other direction, 12 random subruns of `checkout_data_bnb_run1_all` are all in C1
+`beam_good`, and 12 random subruns of `checkout_data_extbnb_run1_PF` are all in EXT C1 (9) or
+C2 (3). So the WC run1 data is a subset of these definitions.
+
 For real data, (run, subrun, event) identifies an event uniquely, so a direct WC comparison is
 possible for any reco2 data we convert. Event-level matching needs IDs read from the reco2
 files, which are on tape (§3).
@@ -144,6 +178,30 @@ ranges above. The mapping of the other epochs to runs 2 and 3 still needs confir
 | `data_bnb_mcc9.1_v08_00_00_25_reco2_C1_beam_good_reco2` | 5,864 | 638,039 | 3.44 TB |
 | `data_extbnb_mcc9.1_v08_00_00_25_reco2_C1_all_reco2` | 1,905 | 441,403 | 2.38 TB |
 | `data_extbnb_mcc9.1_v08_00_00_25_reco2_C2_all_reco2` | 1,138 | 398,046 | 2.05 TB |
+
+All epochs (BNB `beam_good` / EXT `all`; first run is that of the first file listed):
+
+| Epoch | First run | BNB files / events / size | EXT files / events / size |
+|---|---|---|---|
+| C1 | 5127 | 5,864 / 638,039 / 3.4 TB | 1,905 / 441,403 / 2.4 TB |
+| C2 | - | (no beam_good def) | 1,138 / 398,046 / 2.0 TB |
+| D1 | 8336 | 307 / 6,733 / 37 GB | 34 / 6,084 / 33 GB |
+| D2 | 8957 | 4,908 / 701,858 / 3.8 TB | 6,995 / 1,088,484 / 5.9 TB |
+| E1 | 11203 | 1,688 / 277,157 / 1.5 TB | 1,777 / 365,471 / 2.0 TB |
+| E2 | - | 0 files | 1,632 / 407,974 / 2.2 TB |
+| F | 13907 | 927 / 149,481 / 0.8 TB | 698 / 183,667 / 1.0 TB |
+| G1 | 15701 | 6,288 / 786,256 / 4.4 TB | 8,430 / 1,628,176 / 9.0 TB |
+| G2, G2a | 17567, 18926 | 42 and 68 files, 5 and 9 events | 764 / 253,145; 1,362 / 388,434 |
+
+The event counts match the WC data checkout files run by run: run2 WC 975,911 vs D2+E1 978,991 (WC
+runs 8406-11947), and run3 WC 900,334 vs F+G1 935,737 (WC runs 13697-17566). This supports
+D* and E* = run2 and F and G1 = run3.
+
+Products: one C1 `beam_good` file that happened to be on disk (`ONLINE_AND_NEARLINE`; the EXT
+files checked were `NEARLINE`) has `gaushit` and `butcher` (`DataRecoStage1Test`), `pandora` and
+`flashmatch` (`DataRecoStage2`). `ophitBeam` and `simpleFlashBeam` each exist from **three**
+processes (`DataOpticalFilter`, `DataRecoStage1Test`, `DataStage1Optical`), so a data fcl should
+name the process, chosen to match what the overlay HDF5 used.
 
 The beam-good definition is `file_type data and ub_project.name data_bnb_mcc9.1_v08_00_00_25 and data_tier reconstructed and ub_project.stage reco2_C1 and data_stream beam_good and defname: goodruns_mcc9_run1_hardcoded`,
 so the run1 good-run list is already applied. File names show the chain
@@ -177,16 +235,20 @@ A data job fcl plus a small `isRealData()` guard in the module should be enough.
 prestaged C1 beam-good file and one EXT file.
 
 ## 4. Open items
-- [ ] Full event-ID dump of all 24,436 public artroot files (about 5-6 h with 4 workers on a
-      GPVM, or as grid jobs): exact count of events shared with WC run1 overlay.
-- [ ] Event IDs from the open-data HDF5 `event_table` (on Polaris): why the HDF5 has 72% of the
-      artroot events, and how many HDF5 events are in WC.
+- [x] Full event-ID dump of all 24,436 public artroot files: 557,568 events shared with WC run1
+      overlay (§2.2).
+- [x] Event IDs from the open-data HDF5 `event_table` (read from Zenodo): 402,231 HDF5 events in
+      WC, truth agrees 100%. The 72% is random whole-file loss (§1).
+- [ ] Save the shared (run, subrun, event) lists (402k BNB, 29k nue) next to the data cache, as
+      the WC-comparison subset. Optionally convert the 6,803 missing files (+155k WC-shared events).
+- [ ] Ask MicroBooNE (microboone_info@fnal.gov) why 6,803 files are missing from the public HDF5.
 - [ ] Which process's `ophitBeam`/`simpleFlashBeam` HDF5Maker picked up.
-- [ ] Confirm the epoch-to-run mapping (D*/E* = run2, F/G* = run3?) and pick the real-data
-      sample size (all of run1? a subset with matching WC events?).
-- [ ] Prestage one C1 beam-good and one C1 EXT reco2 file; check the products exist (`gaushit`,
-      `butcher`, `ophitBeam`, `simpleFlashBeam`, `pandora`, `flashmatch`); patch and run HDF5Maker
-      on them.
+- [x] Epoch-to-run mapping: D*/E* = run2, F/G1 = run3, from the event counts against WC (§3.1).
+- [ ] Pick the real-data sample size (all of run1? a subset with matching WC events?).
+- [x] Products in a data reco2 file: all present (one C1 beam-good file, §3.1). Still to do:
+      check one EXT file once prestaged.
+- [ ] Patch HDF5Maker for data, pin the optical process names, and run on one beam-good and one
+      EXT file.
 - [ ] POT / trigger counts for beam-on and EXT normalization if needed.
 - [ ] Clarify "light triggered beam off": is it the standard EXT stream (external trigger plus
       the software PMT trigger / optical filter), or something else?
