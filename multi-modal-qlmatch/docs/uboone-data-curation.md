@@ -281,6 +281,29 @@ Each gets the WC neutrino selection at event level and, if possible, at hit leve
   carries `ch_u/ch_v/ch_w` and `time_slice` from `convert_3Dpoint_time_ch`. For a ν/cosmic hit
   label that is enough: anything not in the main cluster is WC-cosmic.
 
+### 4.1b What the stored nusel files actually contain (checked 2026-11-11)
+**The stored `nusel*_WCP_*.root` files do NOT contain `T_port_2d`/`T_port_3d`.** Those exist only
+inside the grid job. The stored files have `TC` (every imaged cell: `cluster_id`, `time_slice`,
+`wire_index_u/v/w`, `wire_charge_*`), `TDC` (dead cells), `T_match` (cluster bundle to flash,
+`event_type` bits: 0 in-time, 2 FC, 3 TGM), `T_flash`, `Trun` (with MC truth), and `T_eval` (flash
+match and truth only; the `stm_*` cosmic tagging and the BDT scores are only in the checkout
+files). That is more than `T_port_2d` gives: a 2D footprint for **every** WC cluster, not just the
+in-time bundle.
+
+`scripts/wc_hit_labels.py` rebuilds the labels. The in-time main cluster is chosen as in WCP
+(in-time `T_match` rows, non-TGM first, max measured PE). Hits are matched by (plane, wire,
+`time_slice = (local_time + 2400) // 4`). The tick offset 2400 is confirmed: the share of hits on a
+WC cluster jumps from about 1% to 95% at 2400. The event-level generic ν selection comes from the
+checkout. Check on one BNB overlay file (98 events, 1.6M hits, truth-ν hit = hit with an
+`edep_table` entry):
+
+| WC ν label | truth-ν hit efficiency | purity | cosmic hits mislabelled |
+|---|---|---|---|
+| in-time main cluster | 0.823 | 0.970 | 0.10% |
+| main cluster & generic ν selection | 0.658 | 0.984 | 0.04% |
+
+94.7% of all gaushits lie on some WC cluster footprint.
+
 ### 4.2 samweb definitions of the WC outputs (all on tape, NEARLINE)
 
 | Sample | nusel (`celltree` tier) definition | Files | Events | Size |
@@ -311,7 +334,8 @@ For 60 random public ν_e files (2,364 events), 1,085 (45.9%) are in
       and MC (§1 notes).
 - [ ] Round-1 samples (`datasets/uboone_round1/`, 4 x ~1000 events): staging 201 files (30.7 GB)
       through samweb definition `yuhw_fm4npp_round1_stage` (agreed with the production team).
-      Then: check one nusel file, write the WC hit labeler, patch and run HDF5Maker.
+      Done: nusel content checked, WC hit labeler (`scripts/wc_hit_labels.py`), HDF5Maker built with a
+      data mode (`hdf5maker/`). Next: convert and label all four samples once staged.
 - [x] Epoch-to-run mapping: D*/E* = run2, F/G1 = run3, from the event counts against WC (§3.1).
 - [ ] Pick the real-data sample size (all of run1? a subset with matching WC events?).
 - [x] Products in a data reco2 file: all present (one C1 beam-good file, §3.1). Still to do:
