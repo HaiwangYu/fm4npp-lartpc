@@ -39,27 +39,36 @@ K = np.array([1 << 40, 1 << 20, 1], dtype=np.int64)
 STM = ["stm_eventtype", "stm_lowenergy", "stm_LM", "stm_TGM", "stm_STM", "stm_FullDead", "stm_clusterlength"]
 
 
-def load_nusel(paths):
-    """Per event: (TC arrays for that entry, in-time main cluster id or None)."""
-    out = {}
+TC_BRANCHES = ["cluster_id", "time_slice", "wire_index_u", "wire_index_v", "wire_index_w"]
+
+
+def iter_nusel(paths, wanted):
+    """Yield (event key, TC arrays of that event, in-time main cluster id or None), one event at a
+    time and only for keys in `wanted`. Real-data events are full of cosmic clusters, so loading
+    whole files at once runs out of memory on a GPVM. Empty files (no Trun/TC) are skipped."""
     for p in paths:
         r = uproot.open(p)
+        names = {k.split(";")[0] for k in r.keys()}
+        if not {"Trun", "TC", "T_match"} <= names:
+            print(f"skip (no WC trees): {p}")
+            continue
         run = r["Trun"].arrays(["runNo", "subRunNo", "eventNo"], library="np")
-        tc = r["TC"].arrays(["cluster_id", "time_slice", "wire_index_u", "wire_index_v", "wire_index_w"], library="np")
         tm = r["T_match"].arrays(["tpc_cluster_id", "event_type", "pe_meas", "runNo", "subRunNo", "eventNo"], library="np")
         tkey = np.stack([tm["runNo"], tm["subRunNo"], tm["eventNo"]], 1).astype(np.int64) @ K
         pesum = tm["pe_meas"].sum(1)
         intime = (tm["event_type"] & 1) == 1
-        for i, ev in enumerate(zip(run["runNo"], run["subRunNo"], run["eventNo"])):
-            key = int(np.array(ev, dtype=np.int64) @ K)
+        keys = np.stack([run["runNo"], run["subRunNo"], run["eventNo"]], 1).astype(np.int64) @ K
+        for i, key in enumerate(keys.tolist()):
+            if key not in wanted:
+                continue
             idx = np.where((tkey == key) & intime)[0]
             main = None
             if len(idx):
                 ok = ((tm["event_type"][idx] >> 3) & 1) == 0
                 cand = idx[ok] if ok.any() else idx
                 main = int(tm["tpc_cluster_id"][cand[np.argmax(pesum[cand])]])
-            out[key] = ({k: tc[k][i] for k in tc}, main)
-    return out
+            tc = r["TC"].arrays(TC_BRANCHES, entry_start=i, entry_stop=i + 1, library="np")
+            yield key, {k: tc[k][0] for k in TC_BRANCHES}, main
 
 
 def footprint(tc, plane):
@@ -98,18 +107,18 @@ def main():
     ts = ((f["hit_table/local_time"][:].ravel() + 2400) // 4).astype(np.int64)
     hkey = wi * 100000 + ts
 
-    wc = load_nusel(a.nusel)
     cid = np.full(len(hev), -1, np.int32)
     is_main = np.zeros(len(hev), bool)
     in_nusel = np.zeros(len(ev), bool)
     has_main = np.zeros(len(ev), bool)
     order = np.argsort(hev, kind="stable")
     bounds = np.searchsorted(hev[order], evkey), np.searchsorted(hev[order], evkey, side="right")
-    for j, k in enumerate(evkey):
-        if int(k) not in wc:
-            continue
+    evpos = {int(k): j for j, k in enumerate(evkey)}
+    for k, tc, mc in iter_nusel(a.nusel, evpos):
+        j = evpos[k]
+        if in_nusel[j]:
+            continue                            # same event in two nusel files: keep the first
         in_nusel[j] = True
-        tc, mc = wc[int(k)]
         has_main[j] = mc is not None
         rows = order[bounds[0][j]:bounds[1][j]]
         for p in range(3):
