@@ -149,6 +149,11 @@ WC labels after the fix:
 
 The 10k efficiency counts the ν hits of every event, including those where WC has no ν candidate.
 
+Checks after the fix:
+- A fresh 0.4 conversion of test10 (job 9081816, rc 0) matches the relabelled 0.3 file in every dataset.
+- Polaris re-scored T1 with the fixed labels on the same 425 test events (ν vertex in the AV): WC ν clusters reach charge-weighted F1 0.912 (efficiency 0.892, purity 0.933) and per-event median 0.919. Fine-tuned qlfm reaches 0.852 / 0.836.
+- So WC leads by ~0.06 on T1 after 3,000 qlfm steps on 3.6k hit-labelled events. The per-event means are close (0.79 vs 0.77) because WC has no candidate in some events.
+
 ## Notes for the qlfm side
 
 Differences from the MicroBooNE files:
