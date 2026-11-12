@@ -67,6 +67,8 @@ The default is ±1 RMS.
 |---|---|---|
 | 2026-11-12 | Converter, detector JSON, check script | Done. Debug-queue jobs 9079466–9080493 (development). |
 | 2026-11-12 | 10 BNB CV events (job 9080512) | `sbnd-bnb-cv/test10/sbnd_bnb_cv_test10.h5`: 4.7 MB, `check_h5.py`: no layout problems. Copied to Eagle; sent to `fm4npp-lartpc@polaris` for checking. |
+| 2026-11-12 | Review 1 by fm4npp-lartpc_polaris | Approved for 10k once A and B are in; done in 0.3 (4077488). test10 rebuilt (job 9080764). |
+| 2026-11-12 | 10k BNB CV (job 9080765, capacity, 1 node, 24 processes) | 10,754 events, 21 files, 3.9 GB, 21 min wall. Copied to Eagle; fine-tune test requested from fm4npp-lartpc_polaris. |
 
 ### test10 summary (`check_h5.py`)
 
@@ -75,6 +77,40 @@ The default is ±1 RMS.
 - **Truth:** 7,534 hits with a ν deposit > 0.05 MeV and 137,587 with a cosmic deposit; 1,059 particles (472 ν, 587 cosmic).
 - **Light:** 15,113 ophits in −10…40 µs (155–2,971 per event); 97 PMT channels; beam flash at 0–4 µs. 409 flashes over the full readout.
 - **Wire-Cell:** 6 ν candidates in 6 events. WC ν-cluster hits have purity 0.87 against truth ν hits. Efficiency is 0.29 over all events (5 of 10 ν vertices are outside the AV).
+
+## 10k BNB CV (2026-11-12)
+
+`sbnd-bnb-cv/10k/sbnd_bnb_cv_10k_000..020.h5`:
+- 205 aurora-r2 units, evenly spaced over the 11,872 OK units of the 1M production (`units.txt`); 10,754 events.
+- Run with `pbs/run-many.pbs`: 21 parts of 10 units, 24 processes on one capacity node.
+- Every part rc 0, 11–21 min, 1.5–2.1 GB RSS.
+- 2.14 process-seconds per event, including the ~50 s compile per process.
+
+| Quantity | 10k BNB CV |
+|---|---|
+| Events / with WC output | 10,754 / 10,754 |
+| Neutrinos (`nu_table`) / event-level ν vertex in AV / CC | 19,402 / 4,807 / 8,032 |
+| Hits / per event | 132.4M / 12.3k |
+| Hits with ν deposit > 0.05 MeV / cosmic / none | 6.41M / 122.7M / 3.16M (2.4%) |
+| Projected ν energy on collection planes landing on hits | 92.2% |
+| PMT ophits in −10…40 µs / per event | 19.4M / 1.8k |
+| WC ν candidates (events) | 5,155 (5,055) |
+| WC ν-cluster hit purity vs truth (all / main cluster) | 0.89 / 0.93 |
+| Size | 3.89 GB = 362 kB/event |
+
+## Estimate for the full sample (not run; needs the owner's approval)
+
+The full sample is the aurora-r2 production: 627,205 BNB CV + 268,865 νe CC + 26,745 NC Δ-radiative = 922,815 events.
+
+| | Basis | Full sample |
+|---|---|---|
+| CPU | 2.14 process-s/event | ~550 process-hours |
+| Node-hours, measured packing (24 processes/node) | 0.35 node-h per 10.75k events | ~30 node-h |
+| Node-hours, 64 processes/node (RSS 2 GB, 102 cores; not yet measured) | if Lustre keeps up | ~12 node-h |
+| Disk on Flare | 362 kB/event (BNB; νe CC events have more ν hits) | ~0.33 TB (±30%), ~1,850 files of ~500 events |
+| Copy on Eagle | same | ~0.33 TB; rsync ran at ~130 MB/s, so ~45 min |
+
+Suggested plan: 8 capacity nodes × 64 processes, about 2–4 h wall, after one 64-process pilot node to confirm the packing.
 
 ## Review 1 (fm4npp-lartpc_polaris, 2026-11-12)
 
