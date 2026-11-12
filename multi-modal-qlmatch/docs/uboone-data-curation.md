@@ -332,10 +332,11 @@ For 60 random public ν_e files (2,364 events), 1,085 (45.9%) are in
 - [ ] Ask MicroBooNE (microboone_info@fnal.gov) why 6,803 files are missing from the public HDF5.
 - [x] Which process's `ophitBeam`/`simpleFlashBeam` HDF5Maker reads: `*Stage1Optical` in both data
       and MC (§1 notes).
-- [ ] Round-1 samples (`datasets/uboone_round1/`, 4 x ~1000 events): staging 201 files (30.7 GB)
+- [x] Round-1 samples (`datasets/uboone_round1/`, 4 x ~1000 events): staging 201 files (30.7 GB)
       through samweb definition `yuhw_fm4npp_round1_stage` (agreed with the production team).
-      Done: nusel content checked, WC hit labeler (`scripts/wc_hit_labels.py`), HDF5Maker built with a
-      data mode (`hdf5maker/`). Next: convert and label all four samples once staged.
+      Done (2026-11-12): all four samples converted, WC-labelled and merged into
+      `/pnfs/uboone/persistent/users/yuhw/fm4npp_round1/<sample>.h5`. Summary table and caveats are in
+      `datasets/uboone_round1/README.md`.
 - [x] Epoch-to-run mapping: D*/E* = run2, F/G1 = run3, from the event counts against WC (§3.1).
 - [ ] Pick the real-data sample size (all of run1? a subset with matching WC events?).
 - [x] Products in a data reco2 file: all present (one C1 beam-good file, §3.1). Still to do:

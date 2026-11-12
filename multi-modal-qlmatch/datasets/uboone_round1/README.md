@@ -27,3 +27,27 @@ Selection:
 Files: `<sample>_inputs.txt` (artroot), `<sample>_nusel.txt` (WC outputs), `selection.json`
 (everything, with per-file event counts and lineage), `to_stage.txt` (the 201 tape files: data
 reco2 plus all nusel, about 30.6 GB).
+
+## Production (2026-11-12)
+
+Merged files, one per sample, readable by `qlfm/data/h5reader.py`:
+`/pnfs/uboone/persistent/users/yuhw/fm4npp_round1/{bnb_overlay,nue_overlay,beam_on,ext}.h5`.
+Per-file outputs are in `<sample>/h5/` (HDF5Maker NoWire) and `<sample>/wc/` (`scripts/wc_hit_labels.py`).
+They were made with `hdf5maker/run_round1.sh <sample> convert|label` and then `scripts/merge_round1.py`.
+
+Columns added for WC: `hit_table/wc_cluster_id`, `hit_table/wc_main`, and
+`event_table/wc_{in_nusel,has_intime_main,in_checkout,match_found,match_isFC,generic_nu,numu_score,nue_score,stm_*}`.
+**WC ν hit label = `wc_main & wc_generic_nu`.** Events with `wc_in_nusel == 0` have no WC labels
+(their WC output was still on tape). For ν_e, 259 events are not in the WC checkout
+(`wc_in_checkout == 0`), so `wc_generic_nu` is 0 for them.
+
+| sample | events | with WC labels | WC in-time main | WC generic ν (of labelled) | hits | on a WC cluster | truth-ν eff (main / main&gen) | purity (main / main&gen) |
+|---|---|---|---|---|---|---|---|---|
+| bnb_overlay | 1013 | 959 | 759 | 305 (0.318) | 15.6M | 0.943 | 0.79 / 0.53 | 0.93 / 0.95 |
+| nue_overlay | 1271 | 1271 | 1248 | 865 (0.681) | 21.7M | 0.915 | 0.68 / 0.52 | 0.95 / 0.97 |
+| beam_on | 1041 | 849 | 633 | 71 (0.082) | 17.2M | 0.934 | – | – |
+| ext | 1248 | 1248 | 895 | 27 (0.022) | 19.8M | 0.942 | – | – |
+
+Truth-ν hit = hit with an `edep_table` entry (overlay only). Still on tape at merge time: 1
+beam-on reco2 file, 1 beam-on and 2 BNB-overlay nusel files. Rerun `run_round1.sh` and
+`merge_round1.py` once they are online.
