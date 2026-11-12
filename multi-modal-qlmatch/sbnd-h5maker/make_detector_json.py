@@ -89,6 +89,21 @@ out = {
         "time_unit": "us, relative to the trigger (OpHit::PeakTime); peaktime_abs is OpHit::PeakTimeAbs",
         "beam_gate_note": "MC beam gate start from sim::BeamGateInfo (event_table.beam_gate_start_ns); BNB spill ~1.6 us long",
     },
+    "simulation": {
+        "source": "Avinay's Gen2 production (sbn_parsl wct0319 restartable, runinfo/config.toml): sbndcode v10_14_02_03 e26:prof; "
+                  "gen prodgenie_corsika_proton_rockbox0p1_sbnd.fcl, g4 standard_g4_rockbox_sbnd.fcl, detsim standard_detsim_sbnd.fcl, "
+                  "reco1 standard_reco1_sbnd.fcl",
+        "tpc_detsim": {"module": "simtpc2d = sbnd_wcls_simsp_bothrois (wcsimsp_sbnd.fcl), Wire-Cell 2D sim + NF + SP",
+                       "DL_cm2_per_s": 4.0, "DT_cm2_per_s": 8.8, "electron_lifetime_ms": 35.0, "drift_speed_mm_per_us": 1.563,
+                       "fluctuate": False, "nticks": 3427, "tick0_time_us": -205,
+                       "field_response": "garfield-sbnd-v1.json.bz2", "noise": "sbnd-noise-spectra-v1.json.bz2 (scaled from ProtoDUNE-SP)",
+                       "enableLowROIThresholds": True, "deposits": "ionandscint (with SCE); priorSCE kept in reco1"},
+        "hit_finder": {"label": "gaushit", "module": "sbnd_gaushitfinder (hitfindermodules_sbnd.fcl), morphological candidate finder per plane",
+                       "input": "simtpc2d:gauss (CalDataModuleLabel, reco_sbnd.fcl)"},
+        "light": {"pmt_digitizer": "opdaq (digi_pmt_sbnd.fcl)", "PMTCoatedVUVEff": 0.0392, "PMTUncoatedEff": 0.0357,
+                  "PMTDarkNoiseRate_Hz": 1000.0, "PMTBaselineRMS_ADC": 2.6, "PMTChargeToADC": -25.97, "PMTSinglePEmodel": "data",
+                  "ScintPreScale": 0.0392, "photon_sim": "pdfastsim (semi-analytical) G4 stage", "ophit_label": "ophitpmt"},
+    },
     "opdets": opdets,
     "n_pmt": sum(1 for o in opdets if o["type"].startswith("pmt")),
 }

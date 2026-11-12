@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "canvas/Persistency/Common/FindMany.h"
+#include "canvas/Persistency/Common/FindManyP.h"
 #include "canvas/Utilities/InputTag.h"
 #include "gallery/Event.h"
 #include "lardataobj/AnalysisBase/BackTrackerMatchingData.h"
@@ -61,6 +62,7 @@ struct Geo {
   std::vector<double> x, y0, z0, pdy, pdz, pitch, dt;
   std::vector<int> n, ch0, step;
   double drift_v = 0.1563, tick_us = 0.5, trig_tick = 410, window = 1.0, pad = 0.0;
+  double av[6] = {-200, 200, -203.7325, 203.7325, 0, 501};  // active volume x, y, z ranges [cm]
   TH3F* sce[2][3] = {{nullptr, nullptr, nullptr}, {nullptr, nullptr, nullptr}};  // [E(x<0), W(x>0)][x, y, z]
   bool use_sce = false;
 };
@@ -130,19 +132,23 @@ enum Cat { Pion = 0, Muon = 1, Kaon = 2, Proton = 3, Electron = 4, Michel = 5, D
 
 struct Out {
   int run = 0, subrun = 0, event = 0;
-  // event truth (first beam-neutrino MCTruth; n_nu = number of MCTruths with a neutrino)
-  int n_nu = 0, is_cc = -1, nu_pdg = 0, nu_mode = -1, nu_int_type = -1, lep_pdg = 0;
+  // event truth: the neutrino chosen by choose_nu() (nu_sel = its nu_index, -1 if none);
+  // n_nu = number of generator MCTruths with a neutrino
+  int n_nu = 0, nu_sel = -1, is_cc = -1, nu_pdg = 0, nu_mode = -1, nu_int_type = -1, lep_pdg = 0;
   float nu_energy = -1, lep_energy = -1, nu_time = 0;
   std::vector<float> nu_dir, nu_vtx;
+  // nu_table: one row per generator MCTruth with a neutrino; nu_index = position in the generator collection
+  std::vector<int> v_index, v_pdg, v_cc, v_mode, v_int, v_lep_pdg, v_in_av;
+  std::vector<float> v_energy, v_lep_energy, v_time, v_vtx, v_dir, v_ecoll, v_nhits_coll;
   float beam_gate_start = -1, beam_gate_width = -1;
   // hit_table
   std::vector<int> h_tpc, h_plane, h_wire, h_channel;
   std::vector<float> h_time, h_integral, h_rms, h_amp;
   // edep (hit -> particle)
-  std::vector<int> e_hit, e_g4, e_origin, e_maxide;
+  std::vector<int> e_hit, e_g4, e_origin, e_maxide, e_nu;
   std::vector<float> e_energy, e_frac, e_nelec;
   // particle_table
-  std::vector<int> p_g4, p_pdg, p_parent, p_cat, p_inst, p_origin;
+  std::vector<int> p_g4, p_pdg, p_parent, p_cat, p_inst, p_origin, p_nu;
   std::vector<float> p_mom, p_start, p_end, p_t;
   std::vector<std::string> p_sproc, p_eproc;
   // ophit_table
@@ -176,24 +182,32 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
   // ---- neutrino truth (HDF5Maker EventInfo "nu")
   o.nu_dir.assign(3, 0.f);
   o.nu_vtx.assign(3, -9999.f);
+  std::map<size_t, size_t> nurow;  // generator MCTruth index -> nu_table row
   {
     auto th = ev.getValidHandle<std::vector<simb::MCTruth>>(art::InputTag(L.truth));
-    for (auto const& t : *th) {
+    for (size_t k = 0; k < th->size(); ++k) {
+      auto const& t = (*th)[k];
       if (!t.NeutrinoSet()) continue;
-      if (o.n_nu++ > 0) continue;
+      ++o.n_nu;
       auto const& nu = t.GetNeutrino();
       auto const& p = nu.Nu();
-      o.is_cc = nu.CCNC() == simb::kCC;
-      o.nu_pdg = p.PdgCode();
-      o.nu_energy = p.E();
-      o.lep_energy = nu.Lepton().E();
-      o.lep_pdg = nu.Lepton().PdgCode();
-      o.nu_mode = nu.Mode();
-      o.nu_int_type = nu.InteractionType();
+      nurow[k] = o.v_index.size();
+      o.v_index.push_back(k);
+      o.v_pdg.push_back(p.PdgCode());
+      o.v_cc.push_back(nu.CCNC() == simb::kCC);
+      o.v_mode.push_back(nu.Mode());
+      o.v_int.push_back(nu.InteractionType());
+      o.v_lep_pdg.push_back(nu.Lepton().PdgCode());
+      o.v_energy.push_back(p.E());
+      o.v_lep_energy.push_back(nu.Lepton().E());
+      o.v_time.push_back(p.T());
+      o.v_vtx.insert(o.v_vtx.end(), {(float)p.Vx(), (float)p.Vy(), (float)p.Vz()});
       auto d = p.Momentum().Vect().Unit();
-      o.nu_dir = {(float)d.X(), (float)d.Y(), (float)d.Z()};
-      o.nu_vtx = {(float)p.Vx(), (float)p.Vy(), (float)p.Vz()};
-      o.nu_time = p.T();
+      o.v_dir.insert(o.v_dir.end(), {(float)d.X(), (float)d.Y(), (float)d.Z()});
+      o.v_in_av.push_back(p.Vx() > G.av[0] && p.Vx() < G.av[1] && p.Vy() > G.av[2] && p.Vy() < G.av[3] &&
+                          p.Vz() > G.av[4] && p.Vz() < G.av[5]);
+      o.v_ecoll.push_back(0.f);
+      o.v_nhits_coll.push_back(0.f);
     }
   }
   {
@@ -207,14 +221,16 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
   // ---- MC particles and their origin (MCParticle -> MCTruth assns written by largeant)
   auto mcp = ev.getValidHandle<std::vector<simb::MCParticle>>(art::InputTag(L.mcparticle));
   std::map<int, size_t> tid2idx;
-  std::vector<int> origin(mcp->size(), 0);
+  std::vector<int> origin(mcp->size(), 0), pnu(mcp->size(), -1);
   {
-    art::FindMany<simb::MCTruth, sim::GeneratedParticleInfo> fmt(mcp, ev, art::InputTag(L.mcparticle));
+    art::FindManyP<simb::MCTruth, sim::GeneratedParticleInfo> fmt(mcp, ev, art::InputTag(L.mcparticle));
     for (size_t i = 0; i < mcp->size(); ++i) {
       tid2idx[(*mcp)[i].TrackId()] = i;
       auto const& v = fmt.at(i);
-      if (!v.empty()) origin[i] = v[0]->Origin();
-      else ++o.n_mcp_no_truth;
+      if (v.empty()) { ++o.n_mcp_no_truth; continue; }
+      origin[i] = v[0]->Origin();
+      // beam neutrinos come only from the generator collection: the Ptr key is the MCTruth index there
+      if (origin[i] == simb::kBeamNeutrino && nurow.count(v[0].key())) pnu[i] = v[0].key();
     }
   }
   o.n_mcp = mcp->size();
@@ -237,6 +253,10 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
   auto origin_of = [&](int tid) {
     auto it = tid2idx.find(kept_tid(tid));
     return it == tid2idx.end() ? 0 : origin[it->second];
+  };
+  auto nu_of = [&](int tid) {
+    auto it = tid2idx.find(kept_tid(tid));
+    return it == tid2idx.end() ? -1 : pnu[it->second];
   };
 
   // ---- hits + BackTracker matching
@@ -351,10 +371,41 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
       o.e_hit.push_back(ih);
       o.e_g4.push_back(m.tid);
       o.e_origin.push_back(m.tid > 0 ? origin_of(m.tid) : 0);
+      int inu = m.tid > 0 ? nu_of(m.tid) : -1;
+      o.e_nu.push_back(inu);
+      if (inu >= 0 && h.WireID().Plane == 2) {
+        size_t r = nurow[inu];
+        o.v_ecoll[r] += m.e;
+        if (m.ismax) o.v_nhits_coll[r] += 1;
+      }
       o.e_energy.push_back(m.e);
       o.e_frac.push_back(m.frac);
       o.e_maxide.push_back(m.ismax);
       o.e_nelec.push_back(m.ne);
+    }
+  }
+
+  // ---- event-level neutrino (choose_nu): the one with the most deposited energy on collection-plane hits;
+  // ties (e.g. none visible) go to the one with the vertex in the active volume, then to the lowest nu_index.
+  {
+    int best = -1;
+    for (size_t r = 0; r < o.v_index.size(); ++r) {
+      if (best < 0) { best = r; continue; }
+      if (o.v_ecoll[r] > o.v_ecoll[best] ||
+          (o.v_ecoll[r] == o.v_ecoll[best] && o.v_in_av[r] > o.v_in_av[best])) best = r;
+    }
+    if (best >= 0) {
+      o.nu_sel = o.v_index[best];
+      o.is_cc = o.v_cc[best];
+      o.nu_pdg = o.v_pdg[best];
+      o.nu_energy = o.v_energy[best];
+      o.lep_energy = o.v_lep_energy[best];
+      o.lep_pdg = o.v_lep_pdg[best];
+      o.nu_mode = o.v_mode[best];
+      o.nu_int_type = o.v_int[best];
+      o.nu_time = o.v_time[best];
+      o.nu_vtx = {o.v_vtx[3 * best], o.v_vtx[3 * best + 1], o.v_vtx[3 * best + 2]};
+      o.nu_dir = {o.v_dir[3 * best], o.v_dir[3 * best + 1], o.v_dir[3 * best + 2]};
     }
   }
 
@@ -439,6 +490,7 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
     o.p_cat.push_back(cat);
     o.p_inst.push_back(inst);
     o.p_origin.push_back(origin[it->second]);
+    o.p_nu.push_back(pnu[it->second]);
     o.p_mom.push_back(p.P());
     o.p_start.insert(o.p_start.end(), {(float)p.Vx(), (float)p.Vy(), (float)p.Vz()});
     o.p_end.insert(o.p_end.end(), {(float)p.EndX(), (float)p.EndY(), (float)p.EndZ()});

@@ -68,13 +68,13 @@ def main():
     R["problems"] = problems
 
     # ---- events
-    ev = {c: col(f, "event_table", c) for c in ("nu_pdg", "is_cc", "nu_energy", "n_nu", "wc_status", "beam_gate_start", "n_mcp_no_truth")}
+    ev = {c: col(f, "event_table", c) for c in ("nu_pdg", "is_cc", "nu_energy", "n_nu", "wc_status", "beam_gate_start_ns", "n_mcp_no_truth")}
     vtx = col(f, "event_table", "nu_vtx")
     av = (np.abs(vtx[:, 0]) < 200) & (np.abs(vtx[:, 1]) < 200) & (vtx[:, 2] > 0) & (vtx[:, 2] < 500)
     R["event"] = {"nu_pdg": {int(k): int(v) for k, v in zip(*np.unique(ev["nu_pdg"], return_counts=True))},
                   "is_cc": int((ev["is_cc"] == 1).sum()), "nu_in_av": int(av.sum()),
                   "nu_energy_q": q(ev["nu_energy"]), "n_nu": {int(k): int(v) for k, v in zip(*np.unique(ev["n_nu"], return_counts=True))},
-                  "wc_status_1": int((ev["wc_status"] == 1).sum()), "beam_gate_start_ns": q(ev["beam_gate_start"]),
+                  "wc_status_1": int((ev["wc_status"] == 1).sum()), "beam_gate_start_ns": q(ev["beam_gate_start_ns"]),
                   "mcp_without_mctruth": int(ev["n_mcp_no_truth"].sum())}
 
     # ---- hits

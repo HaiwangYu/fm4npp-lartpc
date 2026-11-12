@@ -36,11 +36,12 @@ Rows are contiguous per event, so `qlfm/data/h5reader.py` reads the files unchan
 
 | Table | Rows | Columns (MicroBooNE names first) |
 |---|---|---|
-| `event_table` | 1 per event | `is_cc, nu_pdg, nu_energy` [GeV], `lep_energy, nu_dir(3), nu_vtx(3)` [cm], `nu_time` [ns], `lep_pdg, nu_mode, nu_int_type, n_nu, beam_gate_start/width` [ns], `wc_status` (1 = Wire-Cell output present), `file_index` (into the `reco1_files` attribute), `n_mcp_no_truth` |
+| `event_table` | 1 per event | `is_cc, nu_pdg, nu_energy` [GeV], `lep_energy, nu_dir(3), nu_vtx(3)` [cm], `nu_time_ns, lep_pdg, nu_mode, nu_int_type`, all for the event's chosen neutrino; `nu_index` (which `nu_table` row, −1 = none), `n_nu, beam_gate_start_ns, beam_gate_width_ns, wc_status` (1 = Wire-Cell output present), `file_index` (into the `reco1_files` attribute), `n_mcp_no_truth` |
+| `nu_table` | 1 per neutrino MCTruth | `nu_index` (position in the `generator` collection), `nu_pdg, is_cc, nu_energy, lep_energy, lep_pdg, nu_vtx(3), nu_dir(3), nu_time_ns, nu_mode, nu_int_type, in_av, edep_collection` [MeV on collection-plane hits], `nhits_collection` (collection hits whose largest contributor is this neutrino) |
 | `hit_table` | gaushit | `hit_id` (= row in the event), `integral, rms, tpc, local_plane, local_wire, local_time` [ticks from readout start], `channel, peak_amplitude` |
-| `edep_table` | (hit, particle) | `hit_id, g4_id, energy` [MeV], `energy_fraction`, `is_max_ide, num_electrons, origin`. **Beam-neutrino particles only** (MicroBooNE semantics: the per-hit ν deposit is the sum over the hit's rows). |
+| `edep_table` | (hit, particle) | `hit_id, g4_id, energy` [MeV], `energy_fraction`, `is_max_ide, num_electrons, origin, nu_index` (the particle's neutrino). **Beam-neutrino particles only** (MicroBooNE semantics: the per-hit ν deposit is the sum over the hit's rows). |
 | `edep_cosmic_table` | (hit, particle) | Same columns, for every other origin. 2 = CORSIKA cosmic; 0 = no MCTruth link, in which case `g4_id` is negative. |
-| `particle_table` | particles with deposits + ancestors | `g4_id, g4_pdg, parent_id, category` (HDF5Maker categories 0–8), `instance, origin, momentum, start_position(3), end_position(3), start_time, start_process, end_process` |
+| `particle_table` | particles with deposits + ancestors | `g4_id, g4_pdg, parent_id, category` (HDF5Maker categories 0–8), `instance, origin, nu_index` (−1 = not from a beam neutrino), `momentum, start_position(3), end_position(3), start_time, start_process, end_process` |
 | `ophit_table` | PMT ophits (`ophitpmt`) | `hit_id, hit_channel` (OpChannel 0–311, PMTs only), `peaktime` [µs, trigger clock], `peaktime_abs, width, area, amplitude, pe`. Kept only in the window in the `ophit_window_us` attribute (default −10…40 µs). |
 | `opflash_table` | `opflashtpc0` + `opflashtpc1` | `flash_id, tpc, time, time_width, y_center, y_width, z_center, z_width, totalpe` (all flashes) |
 | `opflashsumpe_table` | (flash, channel with PE > 0) | `sumpe_id, flash_id, pmt_channel, sumpe` |
@@ -49,9 +50,21 @@ Rows are contiguous per event, so `qlfm/data/h5reader.py` reads the files unchan
 
 The file attributes hold:
 - `detector`: the `sbnd_detector.json` text;
+- `units`: the units of every time, energy and position column. Event-level times are ns on the G4 clock; ophit and flash times are µs on the trigger clock;
+- `nu_choice`: the rule for the event-level neutrino (below);
+- `sim_config`: the detector-simulation and hit-finder settings (diffusion D_L/D_T, lifetime, field response, noise model, PMT efficiencies, hit-finder module);
 - `reco1_files`, `wc_dirs`, `labels`;
 - `hit_truth` and `truth_projection`: how the per-hit truth was made;
 - `ophit_window_us` and `wc_tick_offset`.
+
+## Several neutrinos per spill
+
+A BNB CV spill can hold more than one neutrino interaction (`n_nu` = 2 in 4 of the first 10 events). Every neutrino has a `nu_table` row, and every ν deposit carries its `nu_index`.
+
+`event_table` keeps one neutrino, so the MicroBooNE-style T2/T3/T4 code works unchanged:
+- it is the neutrino with the largest `edep_collection`, the deposited energy of its particles on collection-plane hits;
+- ties (for example, nothing visible) go to the neutrino with its vertex in the active volume, then to the lowest `nu_index`;
+- `event_table.nu_index` says which neutrino it is.
 
 ## Per-hit truth: projected Geant4 deposits
 

@@ -76,6 +76,18 @@ The default is ±1 RMS.
 - **Light:** 15,113 ophits in −10…40 µs (155–2,971 per event); 97 PMT channels; beam flash at 0–4 µs. 409 flashes over the full readout.
 - **Wire-Cell:** 6 ν candidates in 6 events. WC ν-cluster hits have purity 0.87 against truth ν hits. Efficiency is 0.29 over all events (5 of 10 ν vertices are outside the AV).
 
+## Review 1 (fm4npp-lartpc_polaris, 2026-11-12)
+
+The Polaris session approved the 10k run once two changes were in.
+- h5reader reads every table unchanged. A scratch SBND variant of convert.py converts all 10 events, and the batch path works.
+- The ν labels are usable for T1/T2.
+- The PMT map and the −10…40 µs light window are fine.
+
+Requested changes, all done in sbnd-h5maker 0.3:
+- **A (required): multiple neutrinos per spill.** Added `nu_table`, `nu_index` in `edep_table` and `particle_table`, and the event-level choice rule (attribute `nu_choice`). Event 0 of test10 now takes the in-AV neutrino (54 collection hits) instead of the out-of-cryostat one at x = 390.
+- **B (required): units.** The event times are now `nu_time_ns`, `beam_gate_start_ns` and `beam_gate_width_ns`, and a `units` attribute lists the units of every column.
+- **C (nice to have): simulation configuration.** The detsim and hit-finder settings are in `sbnd_detector.json` "simulation" and the `sim_config` attribute.
+
 ## Notes for the qlfm side
 
 Differences from the MicroBooNE files:

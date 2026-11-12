@@ -32,7 +32,15 @@ import h5py
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "sbnd-h5maker 0.2"
+UNITS = {
+    "energy (nu_energy, lep_energy)": "GeV", "edep energy, edep_collection, particle momentum": "MeV / GeV (momentum)",
+    "positions (nu_vtx, start/end_position, reco_vtx, y/z_center)": "cm",
+    "*_ns (nu_time_ns, beam_gate_start_ns, beam_gate_width_ns, particle start_time)": "ns, G4 clock (t = 0 at the trigger)",
+    "hit local_time, rms": "TPC ticks of 0.5 us from the readout start (trigger at tick 410)",
+    "ophit peaktime, width, opflash time, time_width": "us, trigger clock (OpHit::PeakTime); peaktime_abs is OpHit::PeakTimeAbs",
+    "integral": "ADC x tick", "pe, sumpe, totalpe": "photoelectrons",
+    "wc reco_enu": "MeV", "wc flash_time_us": "us"}
+VERSION = "sbnd-h5maker 0.3"
 
 
 # ----------------------------------------------------------------------------------------------- output
@@ -84,18 +92,23 @@ def schema():
     T = {}
     T["event_table"] = Table("event_table", {
         "is_cc": i32(), "nu_pdg": i32(), "nu_energy": f32(), "lep_energy": f32(), "nu_dir": f32(3), "nu_vtx": f32(3),
-        "nu_time": f32(), "lep_pdg": i32(), "nu_mode": i32(), "nu_int_type": i32(), "n_nu": i32(),
-        "beam_gate_start": f32(), "beam_gate_width": f32(), "wc_status": i32(), "file_index": i32(),
-        "n_mcp_no_truth": i32()})
+        "nu_time_ns": f32(), "lep_pdg": i32(), "nu_mode": i32(), "nu_int_type": i32(), "n_nu": i32(),
+        "nu_index": i32(), "beam_gate_start_ns": f32(), "beam_gate_width_ns": f32(), "wc_status": i32(),
+        "file_index": i32(), "n_mcp_no_truth": i32()})
+    T["nu_table"] = Table("nu_table", {
+        "nu_index": i32(), "nu_pdg": i32(), "is_cc": i32(), "nu_energy": f32(), "lep_energy": f32(),
+        "lep_pdg": i32(), "nu_vtx": f32(3), "nu_dir": f32(3), "nu_time_ns": f32(), "nu_mode": i32(),
+        "nu_int_type": i32(), "in_av": i32(), "edep_collection": f32(), "nhits_collection": i32()})
     T["hit_table"] = Table("hit_table", {
         "hit_id": i32(), "integral": f32(), "rms": f32(), "tpc": i32(), "local_plane": i32(), "local_wire": i32(),
         "local_time": f32(), "channel": i32(), "peak_amplitude": f32()})
     edep = {"hit_id": i32(), "g4_id": i32(), "energy": f32(), "energy_fraction": f32(), "is_max_ide": i32(),
-            "num_electrons": f32(), "origin": i32()}
+            "num_electrons": f32(), "origin": i32(), "nu_index": i32()}
     T["edep_table"] = Table("edep_table", dict(edep))
     T["edep_cosmic_table"] = Table("edep_cosmic_table", dict(edep))
     T["particle_table"] = Table("particle_table", {
         "g4_id": i32(), "g4_pdg": i32(), "parent_id": i32(), "category": i32(), "instance": i32(), "origin": i32(),
+        "nu_index": i32(),
         "momentum": f32(), "start_position": f32(3), "end_position": f32(3), "start_time": f32(),
         "start_process": ("S24", 1), "end_process": ("S24", 1)})
     T["ophit_table"] = Table("ophit_table", {
@@ -249,6 +262,9 @@ def make_geo(ROOT, det, a):
     G.drift_v = det["drift_speed_cm_per_us"]
     G.tick_us = det["tick_us"]
     G.trig_tick = det["trigger_tick"]
+    av = det["active_volume"]
+    for i, v in enumerate(av["x"] + av["y"] + av["z"]):
+        G.av[i] = v
     G.window = a.proj_window
     G.pad = a.proj_pad
     if a.sce_map and not ROOT.sbndh5.load_sce(G, a.sce_map):
@@ -364,17 +380,26 @@ def main():
         stats["wc_missing"] += status == 0
         T["event_table"].add(seq, rse, 1, is_cc=[o.is_cc], nu_pdg=[o.nu_pdg], nu_energy=[o.nu_energy],
                              lep_energy=[o.lep_energy], nu_dir=list(o.nu_dir), nu_vtx=list(o.nu_vtx),
-                             nu_time=[o.nu_time], lep_pdg=[o.lep_pdg], nu_mode=[o.nu_mode],
-                             nu_int_type=[o.nu_int_type], n_nu=[o.n_nu], beam_gate_start=[o.beam_gate_start],
-                             beam_gate_width=[o.beam_gate_width], wc_status=[status], file_index=[fidx],
-                             n_mcp_no_truth=[o.n_mcp_no_truth])
+                             nu_time_ns=[o.nu_time], lep_pdg=[o.lep_pdg], nu_mode=[o.nu_mode],
+                             nu_int_type=[o.nu_int_type], n_nu=[o.n_nu], nu_index=[o.nu_sel],
+                             beam_gate_start_ns=[o.beam_gate_start], beam_gate_width_ns=[o.beam_gate_width],
+                             wc_status=[status], file_index=[fidx], n_mcp_no_truth=[o.n_mcp_no_truth])
+        nnu = o.v_index.size()
+        T["nu_table"].add(seq, rse, nnu, nu_index=V(o.v_index, np.int32), nu_pdg=V(o.v_pdg, np.int32),
+                          is_cc=V(o.v_cc, np.int32), nu_energy=V(o.v_energy, np.float32),
+                          lep_energy=V(o.v_lep_energy, np.float32), lep_pdg=V(o.v_lep_pdg, np.int32),
+                          nu_vtx=V(o.v_vtx, np.float32), nu_dir=V(o.v_dir, np.float32),
+                          nu_time_ns=V(o.v_time, np.float32), nu_mode=V(o.v_mode, np.int32),
+                          nu_int_type=V(o.v_int, np.int32), in_av=V(o.v_in_av, np.int32),
+                          edep_collection=V(o.v_ecoll, np.float32), nhits_collection=V(o.v_nhits_coll, np.float32))
         T["hit_table"].add(seq, rse, nh, hit_id=np.arange(nh), integral=V(o.h_integral, np.float32),
                            rms=V(o.h_rms, np.float32), tpc=V(o.h_tpc, np.int32), local_plane=V(o.h_plane, np.int32),
                            local_wire=V(o.h_wire, np.int32), local_time=h_t, channel=h_ch,
                            peak_amplitude=V(o.h_amp, np.float32))
         e = dict(hit_id=V(o.e_hit, np.int32), g4_id=V(o.e_g4, np.int32), energy=V(o.e_energy, np.float32),
                  energy_fraction=V(o.e_frac, np.float32), is_max_ide=V(o.e_maxide, np.int32),
-                 num_electrons=V(o.e_nelec, np.float32), origin=V(o.e_origin, np.int32))
+                 num_electrons=V(o.e_nelec, np.float32), origin=V(o.e_origin, np.int32),
+                 nu_index=V(o.e_nu, np.int32))
         isnu = e["origin"] == 1
         T["edep_table"].add(seq, rse, int(isnu.sum()), **{k: v[isnu] for k, v in e.items()})
         T["edep_cosmic_table"].add(seq, rse, int((~isnu).sum()), **{k: v[~isnu] for k, v in e.items()})
@@ -382,6 +407,7 @@ def main():
         T["particle_table"].add(seq, rse, npart, g4_id=V(o.p_g4, np.int32), g4_pdg=V(o.p_pdg, np.int32),
                                 parent_id=V(o.p_parent, np.int32), category=V(o.p_cat, np.int32),
                                 instance=V(o.p_inst, np.int32), origin=V(o.p_origin, np.int32),
+                                nu_index=V(o.p_nu, np.int32),
                                 momentum=V(o.p_mom, np.float32), start_position=V(o.p_start, np.float32),
                                 end_position=V(o.p_end, np.float32), start_time=V(o.p_t, np.float32),
                                 start_process=[str(s).encode()[:24] for s in o.p_sproc],
@@ -464,6 +490,12 @@ def main():
                                         "beamgate": str(L.beamgate)})
         if os.path.exists(a.detector_json):
             f.attrs["detector"] = open(a.detector_json).read()
+            if "simulation" in det:
+                f.attrs["sim_config"] = json.dumps(det["simulation"])
+        f.attrs["units"] = json.dumps(UNITS)
+        f.attrs["nu_choice"] = ("event_table neutrino = nu_table row with the largest edep_collection (deposited energy of "
+                                "that neutrino's particles on collection-plane hits); ties go to in_av = 1, then to the "
+                                "lowest nu_index. event_table.nu_index names it (-1 = no neutrino).")
     os.replace(tmp, a.out)
     stats["rows"] = rows
     stats["seconds"] = round(time.time() - t0, 1)
