@@ -53,9 +53,13 @@ Products HDF5Maker reads (labels from `HDF5Maker.fcl`), as found in one public f
 | TruthLabel `generator`, `largeant`, `mcreco` | MCTruth, MCParticles, MCShower/MCTrack | gen / g4 |
 
 Notes:
-- `ophitBeam` and `simpleFlashBeam` exist from two processes. `getByLabel` without a process
-  name returns the most recent one. Which one that is has not been checked, but it matters
-  for the light inputs.
+- `ophitBeam` and `simpleFlashBeam` exist from two processes in MC (`OverlayStage1a`,
+  `OverlayStage1Optical`) and three in data (`DataOpticalFilter`, `DataRecoStage1Test`,
+  `DataStage1Optical`). `getByLabel` without a process name returns the most recent process.
+  The art `ProcessHistory` puts the optical re-reconstruction last in both: `OverlayStage1Optical`
+  after `OverlayStage1a`, and `DataStage1Optical` after `DataRecoStage1Test`. So HDF5Maker reads
+  the `*Stage1Optical` light in both data and MC, which is consistent. Pin the process name in the
+  data job anyway.
 - reco1 files alone would lack `pandora` and `flashmatch`. HDF5Maker only needs those for the
   Pandora tables and T0, so the core hit/flash tables could be made from reco1.
 - The public HDF5 has 753,467 events, against 1,046,139 in the artroot (72.0%). A full ID dump of
@@ -266,8 +270,16 @@ Each gets the WC neutrino selection at event level and, if possible, at hit leve
   productions were run without them.)
 - Proposed hit label: a gaushit is WC-ν if its (plane, wire, peak tick) falls in a `T_port_2d` bin
   with `main_flag == 1` **and** the event passes the WC generic ν selection in `T_eval`.
-  Otherwise it is WC-cosmic. The tick convention (offset 2400, 4-tick bins) has to be checked on a
-  real file, and so does whether `T_port_2d` holds all clusters or only some.
+  Otherwise it is WC-cosmic. The tick convention (offset 2400, 4-tick bins) still has to be checked
+  on a real file.
+- What `T_port_2d`/`T_port_3d` hold, from the WCP source
+  ([BNLIF/wire-cell `uboone_nusel_app/apps/prod-wire-cell-matching-nusel.cxx`](https://github.com/BNLIF/wire-cell/blob/master/uboone_nusel_app/apps/prod-wire-cell-matching-nusel.cxx)):
+  only the TPC-light bundle matched to the **in-time (beam) flash**. That is its main cluster
+  (`main_flag = 1`) plus the bundle's other clusters (`main_flag = 0`). Cosmic clusters outside
+  that bundle are not stored, and an event with no in-time match has no entries.
+  `start_tick = 4 * time_slice` (the port subtracts 2400 to get LArSoft ticks). Each 3D point
+  carries `ch_u/ch_v/ch_w` and `time_slice` from `convert_3Dpoint_time_ch`. For a ν/cosmic hit
+  label that is enough: anything not in the main cluster is WC-cosmic.
 
 ### 4.2 samweb definitions of the WC outputs (all on tape, NEARLINE)
 
@@ -295,7 +307,11 @@ For 60 random public ν_e files (2,364 events), 1,085 (45.9%) are in
 - [ ] Save the shared (run, subrun, event) lists (402k BNB, 29k nue) next to the data cache, as
       the WC-comparison subset. Optionally convert the 6,803 missing files (+155k WC-shared events).
 - [ ] Ask MicroBooNE (microboone_info@fnal.gov) why 6,803 files are missing from the public HDF5.
-- [ ] Which process's `ophitBeam`/`simpleFlashBeam` HDF5Maker picked up.
+- [x] Which process's `ophitBeam`/`simpleFlashBeam` HDF5Maker reads: `*Stage1Optical` in both data
+      and MC (§1 notes).
+- [ ] Round-1 samples (`datasets/uboone_round1/`, 4 x ~1000 events): staging 201 files (30.7 GB)
+      through samweb definition `yuhw_fm4npp_round1_stage` (agreed with the production team).
+      Then: check one nusel file, write the WC hit labeler, patch and run HDF5Maker.
 - [x] Epoch-to-run mapping: D*/E* = run2, F/G1 = run3, from the event counts against WC (§3.1).
 - [ ] Pick the real-data sample size (all of run1? a subset with matching WC events?).
 - [x] Products in a data reco2 file: all present (one C1 beam-good file, §3.1). Still to do:
