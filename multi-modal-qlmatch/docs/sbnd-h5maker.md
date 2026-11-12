@@ -69,6 +69,7 @@ The default is ±1 RMS.
 | 2026-11-12 | 10 BNB CV events (job 9080512) | `sbnd-bnb-cv/test10/sbnd_bnb_cv_test10.h5`: 4.7 MB, `check_h5.py`: no layout problems. Copied to Eagle; sent to `fm4npp-lartpc@polaris` for checking. |
 | 2026-11-12 | Review 1 by fm4npp-lartpc_polaris | Approved for 10k once A and B are in; done in 0.3 (4077488). test10 rebuilt (job 9080764). |
 | 2026-11-12 | 10k BNB CV (job 9080765, capacity, 1 node, 24 processes) | 10,754 events, 21 files, 3.9 GB, 21 min wall. Copied to Eagle; fine-tune test requested from fm4npp-lartpc_polaris. |
+| 2026-11-12 | Review 2 (fine-tune test) | Format and truth fine; WC hit labels matched on only 2 of 6 (tpc, plane). Fixed in 0.4; test10 and 10k relabelled in place with `relabel_wc.py` and copied to Eagle again. |
 
 ### test10 summary (`check_h5.py`)
 
@@ -123,6 +124,30 @@ Requested changes, all done in sbnd-h5maker 0.3:
 - **A (required): multiple neutrinos per spill.** Added `nu_table`, `nu_index` in `edep_table` and `particle_table`, and the event-level choice rule (attribute `nu_choice`). Event 0 of test10 now takes the in-AV neutrino (54 collection hits) instead of the out-of-cryostat one at x = 390.
 - **B (required): units.** The event times are now `nu_time_ns`, `beam_gate_start_ns` and `beam_gate_width_ns`, and a `units` attribute lists the units of every column.
 - **C (nice to have): simulation configuration.** The detsim and hit-finder settings are in `sbnd_detector.json` "simulation" and the `sim_config` attribute.
+
+## Review 2: fine-tune test (fm4npp-lartpc_polaris, 2026-11-12)
+
+qlfm runs on SBND (`QLFM_DETECTOR=sbnd`, fm4npp-lartpc eea8fe1). The 10k was split 80/10/10, with 6 runs of 3,000 steps on one A100.
+- The MicroBooNE-pretrained model, fine-tuned, beats scratch on every task: T1 charge-weighted hit F1 0.85 vs 0.60–0.70, T5 light MSE 0.66 vs 0.97. A frozen encoder does much worse on T1 (0.49).
+- No run is converged at 3,000 steps, and scratch is the furthest from it.
+- The format, per-ν truth, `_ns` units and `sim_config` work as delivered.
+
+Requested:
+- **(a) Required: WC hit labels.** They matched on U in TPC 0 and Y in TPC 1 only. Cause: Wire-Cell numbers channels plane-major ([U0 U1][V0 V1][Y0 Y1]), LArSoft TPC-major. A per-(tpc, plane) channel-shift scan of the footprints against the hits gives WC = LArSoft + (0, +1984, +3968) in TPC 0 and (−3654, −1670, 0) in TPC 1.
+  - Fixed in 0.4 (`wc_channel_offsets` attribute).
+  - `check_h5.py` now reports WC efficiency and purity per (tpc, plane) and flags a plane below 0.2.
+  - The existing files were relabelled with `relabel_wc.py`; only `wc_hit_table` changed.
+- **(b) Strongly wanted: a νe CC sample**, so that T3 is a real 3-class task (BNB CV has ~30 νe CC per 10k). This waits for the owner's approval.
+
+WC labels after the fix:
+
+| | test10 before | test10 after | 10k after |
+|---|---|---|---|
+| WC ν-cluster hits: efficiency / purity vs truth ν hits (> 0.05 MeV, all events) | 0.29 / 0.87 | 0.85 / 0.91 | 0.66 / 0.90 |
+| Main cluster: efficiency / purity | 0.17 / 0.88 | 0.55 / 0.93 | 0.55 / 0.93 |
+| Per (tpc, plane), charge-weighted, events with a WC candidate: efficiency | 0.96, 0, 0 / 0.002, 0, 0.90 | 0.90–0.96 | 0.89–0.91 (purity 0.92–0.94) |
+
+The 10k efficiency counts the ν hits of every event, including those where WC has no ν candidate.
 
 ## Notes for the qlfm side
 

@@ -13,7 +13,8 @@ open data (`HDF5Maker`, uboone/hdf5maker branch `opensamples`; zenodo 8370883).
 | `extract.h` | C++ helper, JIT-compiled by cling (about 60 s per process). It fills flat per-event vectors and implements the hit-truth projection. |
 | `env.sh` | Container setup: sbndcode v10_14_02_03, gallery v1_22_06, and h5py/uproot wheels for the UPS python 3.9. |
 | `make_detector_json.py` → `sbnd_detector.json` | Detector constants, the linear wire-plane model (channel from (y, z)) and the OpDet positions. |
-| `check_h5.py` | Layout checks and summary distributions. Needs only h5py + numpy. |
+| `check_h5.py` | Layout checks and summary distributions, including the WC label efficiency and purity per (tpc, plane). Needs only h5py + numpy. |
+| `relabel_wc.py` | Rewrites `wc_hit_table` of an existing file from the Wire-Cell footprints (h5py + uproot, no ROOT). Used to fix 0.3 files. |
 | `pbs/run.pbs` | Aurora PBS job: one converter process over a list of aurora-r2 unit directories. |
 
 ## Run (Aurora)
@@ -95,4 +96,6 @@ They come from the per-event `tracking-pr.root` of aurora-r2:
 - `T_kine`: `kine_reco_Enu`;
 - `T_proj_data`: the 2D footprint (channel, 4-tick time slice) of every cluster in a ν candidate.
 
-A gaushit is on a cluster when (channel, floor(PeakTime / 4)) is in that cluster's footprint. The tick offset is 0: a scan over ±3400 ticks peaks at 0. The main cluster wins when footprints overlap.
+A gaushit is on a cluster when (WC channel, floor(PeakTime / 4)) is in that cluster's footprint.
+
+Wire-Cell numbers the channels plane-major, [U0 U1][V0 V1][Y0 Y1], while LArSoft numbers them TPC-major, [U0 V0 Y0][U1 V1 Y1]. The wire order inside each block is the same, so WC channel = LArSoft channel + an offset per (tpc, plane): (0, +1984, +3968) for TPC 0 and (−3654, −1670, 0) for TPC 1. The offsets are in the `wc_channel_offsets` attribute. Versions before 0.4 matched on the LArSoft channel, so only U in TPC 0 and Y in TPC 1 got labels. The tick offset is 0: a scan over ±3400 ticks peaks at 0. The main cluster wins when footprints overlap.

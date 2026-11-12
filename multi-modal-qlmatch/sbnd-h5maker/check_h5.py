@@ -131,6 +131,26 @@ def main():
     R["wc"] = {"candidates": int(f["wc_event_table/event_id"].shape[0]),
                "events_with_candidate": int(len(np.unique(f["wc_event_table/event_id"][:], axis=0))) if f["wc_event_table/event_id"].shape[0] else 0,
                "all_nu_cluster_hits": eff_pur(on), "main_cluster_hits": eff_pur(wmain == 1), "in_enu_hits": eff_pur(wenu == 1)}
+    # per (tpc, plane), charge-weighted, over events with a WC nu candidate: a channel-numbering mismatch shows up
+    # as one plane with efficiency ~0 while the others are fine
+    cand_ev = np.zeros(n_ev, bool)
+    if f["wc_event_table/event_id"].shape[0]:
+        cs, cc = offsets(f, "wc_event_table", n_ev)
+        cand_ev = cc > 0
+    inc = cand_ev[evt]
+    R["wc"]["by_tpc_plane_charge_weighted"] = {}
+    for t_ in np.unique(tpc):
+        for p_ in np.unique(pl):
+            m = inc & (tpc == t_) & (pl == p_)
+            w = integ[m]
+            tr, sel = nu_hit[m], on[m]
+            eff = float((w * (tr & sel)).sum() / max(1e-9, (w * tr).sum()))
+            pur = float((w * (tr & sel)).sum() / max(1e-9, (w * sel).sum()))
+            R["wc"]["by_tpc_plane_charge_weighted"]["tpc%d_plane%d" % (t_, p_)] = {
+                "eff": round(eff, 4), "purity": round(pur, 4), "selected_hits": int(sel.sum())}
+            if tr.sum() >= 50 and eff < 0.2:
+                problems.append("WC hit labels: tpc%d plane%d efficiency %.3f (channel numbering?)" % (t_, p_, eff))
+    R["problems"] = problems
     print(json.dumps(R, indent=1))
     if a.json:
         json.dump(R, open(a.json, "w"), indent=1)

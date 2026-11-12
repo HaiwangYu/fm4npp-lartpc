@@ -40,7 +40,7 @@ UNITS = {
     "ophit peaktime, width, opflash time, time_width": "us, trigger clock (OpHit::PeakTime); peaktime_abs is OpHit::PeakTimeAbs",
     "integral": "ADC x tick", "pe, sumpe, totalpe": "photoelectrons",
     "wc reco_enu": "MeV", "wc flash_time_us": "us"}
-VERSION = "sbnd-h5maker 0.3"
+VERSION = "sbnd-h5maker 0.4"
 
 
 # ----------------------------------------------------------------------------------------------- output
@@ -153,10 +153,15 @@ def vec2np(ROOT, v, dt):
 class WC:
     """Per-event Wire-Cell (aurora-r2 tracking-pr.root) event rows and hit labels."""
 
-    def __init__(self, wc_dirs, tick_offset, ticks_per_slice):
+    def __init__(self, wc_dirs, tick_offset, ticks_per_slice, det):
         import uproot
         self.uproot = uproot
         self.dirs, self.off, self.tps = wc_dirs, tick_offset, ticks_per_slice
+        self.ch_off = wc_channel_offsets(det)
+
+    def wc_channel(self, channel, tpc, plane):
+        """LArSoft channel -> Wire-Cell T_proj_data channel (plane-major numbering, see wc_channel_offsets)."""
+        return np.asarray(channel, np.int64) + self.ch_off[np.asarray(tpc, np.int64), np.asarray(plane, np.int64)]
 
     def path(self, rse):
         for d in self.dirs:
@@ -215,7 +220,9 @@ class WC:
         return 1, cands, fp
 
     def hit_labels(self, fp, channel, tick, off=None):
-        """Per hit: (cluster id, nu index, in main cluster, in energy clusters); -1/0 outside the footprint."""
+        """Per hit: (cluster id, nu index, in main cluster, in energy clusters); -1/0 outside the footprint.
+
+        channel must be in the Wire-Cell numbering (WC.wc_channel), not the LArSoft one."""
         n = len(channel)
         cid = np.full(n, -1, np.int32)
         nui = np.full(n, -1, np.int32)
@@ -241,6 +248,26 @@ class WC:
             sel = cid == c
             nui[sel], mn[sel], en[sel] = nu, m, e
         return cid, nui, mn, en
+
+
+def wc_channel_offsets(det):
+    """Offset (tpc, plane) such that WC channel = LArSoft channel + offset.
+
+    LArSoft numbers SBND channels TPC-major: [U0 V0 Y0][U1 V1 Y1]. The Wire-Cell PR output (T_proj_data) numbers
+    them plane-major: [U0 U1][V0 V1][Y0 Y1], keeping the LArSoft wire order inside each block. Checked on test10:
+    a per-(tpc, plane) channel-shift scan of the footprints against the hits peaks at exactly these offsets.
+    """
+    wp = {(w["tpc"], w["plane"]): w for w in det["wire_planes"]}
+    tpcs = sorted({t for t, _ in wp})
+    off = np.zeros((len(tpcs), 3), np.int64)
+    base = 0
+    for p in range(3):
+        for t in tpcs:
+            w = wp[(t, p)]
+            first = min(w["channel0"], w["channel0"] + w["channel_step"] * (w["n_wires"] - 1))
+            off[t, p] = base - first
+            base += w["n_wires"]
+    return off
 
 
 def make_geo(ROOT, det, a):
@@ -323,11 +350,11 @@ def main():
     t0 = time.time()
     ROOT = load_gallery()
     print("gallery + extract.h ready in %.0f s" % (time.time() - t0), flush=True)
-    wc = WC(wcdirs, a.wc_tick_offset, a.wc_ticks_per_slice)
+    det = json.load(open(a.detector_json))
+    wc = WC(wcdirs, a.wc_tick_offset, a.wc_ticks_per_slice, det)
     T = schema()
     L = ROOT.sbndh5.Labels()
     L.tdc_offset = a.tdc_offset
-    det = json.load(open(a.detector_json))
     G = make_geo(ROOT, det, a)
     o = ROOT.sbndh5.Out()
     vf = ROOT.std.vector("std::string")()
@@ -431,13 +458,14 @@ def main():
                                     sumpe=V(o.s_pe, np.float32))
         if cands:
             T["wc_event_table"].add(seq, rse, len(cands), **{k: [c[k] for c in cands] for k in T["wc_event_table"].cols})
-        cid, nui, mn, en = wc.hit_labels(fp, h_ch, h_t)
+        h_wcch = wc.wc_channel(h_ch, V(o.h_tpc, np.int32), V(o.h_plane, np.int32))
+        cid, nui, mn, en = wc.hit_labels(fp, h_wcch, h_t)
         T["wc_hit_table"].add(seq, rse, nh, hit_id=np.arange(nh), wc_cluster_id=cid, wc_nu_index=nui, wc_main=mn,
                               wc_in_enu=en)
         if fp is not None and scanned < a.scan_offsets:
             scanned += 1
             for off in range(-3400, 3401, 8):
-                c2 = wc.hit_labels(fp, h_ch, h_t, off=off)[0]
+                c2 = wc.hit_labels(fp, h_wcch, h_t, off=off)[0]
                 stats["scan"][off] = stats["scan"].get(off, 0) + int((c2 >= 0).sum())
 
         stats["events"] += 1
@@ -473,6 +501,7 @@ def main():
         f.attrs["reco1_files"] = json.dumps(files)
         f.attrs["wc_dirs"] = json.dumps(wcdirs)
         f.attrs["wc_tick_offset"] = a.wc_tick_offset
+        f.attrs["wc_channel_offsets"] = json.dumps(wc.ch_off.tolist())
         f.attrs["ophit_window_us"] = a.ophit_window
         f.attrs["wc_ticks_per_slice"] = a.wc_ticks_per_slice
         f.attrs["hit_truth"] = {1: "gaushitTruthMatch assns",
