@@ -48,6 +48,8 @@ Columns added for WC: `hit_table/wc_cluster_id`, `hit_table/wc_main`, and
 | beam_on | 1041 | 849 | 633 | 71 (0.082) | 17.2M | 0.934 | – | – |
 | ext | 1248 | 1248 | 895 | 27 (0.022) | 19.8M | 0.942 | – | – |
 
-Truth-ν hit = hit with an `edep_table` entry (overlay only). Still on tape at merge time: 1
-beam-on reco2 file, 1 beam-on and 2 BNB-overlay nusel files. Rerun `run_round1.sh` and
-`merge_round1.py` once they are online.
+Truth-ν hit = hit with an `edep_table` entry (overlay only). Four files never came off tape: 1
+beam-on reco2 file (run 5422), 1 beam-on and 2 BNB-overlay nusel files. The SAM prestage project
+`prestage_yuhw_fm4npp_round1_stage_20261111201843` was ended on 2026-11-12 (197/201 delivered, 0
+failed), and round 1 is **final as above**. To add the four later, prestage them again, then rerun
+`run_round1.sh` and `merge_round1.py`.
