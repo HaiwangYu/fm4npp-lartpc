@@ -14,6 +14,13 @@ SBND files (sbnd-h5maker, issue #11; set QLFM_DETECTOR=sbnd) differ in:
   * the event-level neutrino is the event_table one (largest collection-plane deposit, attribute nu_choice), while
     the per-hit nu deposit and the visibility counts include every neutrino of the spill; n_nu is kept.
 
+MicroBooNE round-1 files (issue #10; datasets/uboone_round1/README.md) differ in:
+  * real data (beam_on, ext) has no truth columns: is_data = 1 and the truth fields keep neutral defaults
+    (nu_pdg 0, is_cc -1, energies 0, vertices NaN, no hit deposits), so every event reads as T2 class 0;
+  * Wire-Cell labels, copied when present: hit_wc_main (hit in WC's in-time main cluster) and the event columns
+    wc_generic_nu, wc_in_nusel, wc_in_checkout, ... as ev_wc_*. WC nu-hit label = hit_wc_main & ev_wc_generic_nu,
+    defined only where ev_wc_in_nusel == 1.
+
 Usage: python -m qlfm.data.convert IN.h5 OUTDIR [--chunk 2000]
 """
 import argparse
@@ -69,6 +76,13 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
 
     # ---------------- per-event truth ----------------
     ev, _ = rd("event_table", 0, n)
+    is_data = "nu_pdg" not in ev
+    if is_data:         # real data (round-1 beam_on / ext): neutral truth
+        nan3 = np.full((n, 3), np.nan, np.float32)
+        ev.update(nu_pdg=np.zeros(n), is_cc=np.full(n, -1), nu_energy=np.zeros(n), lep_energy=np.zeros(n),
+                  nu_vtx=nan3, nu_vtx_corr=nan3, nu_vtx_wire_time=np.full(n, np.nan))
+    wc_ev = sorted(k for k in ev if k.startswith("wc_"))
+    wc_hit = "wc_main" in f.columns("hit_table")
     out_ev = {
         "run": ev["event_id"][:, 0].astype(np.int32),
         "subrun": ev["event_id"][:, 1].astype(np.int32),
@@ -86,6 +100,9 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
     }
     if sbnd:
         out_ev["n_nu"] = ev["n_nu"].astype(np.int16)
+    out_ev["is_data"] = np.full(n, int(is_data), np.int8)
+    for k in wc_ev:
+        out_ev[k] = ev[k].astype(np.float32 if "score" in k or k == "wc_stm_clusterlength" else np.int16)
     nu_nhits = np.zeros((n, 3), np.int32)       # per plane, hits with nu edep above 0
     nu_q = np.zeros((n, 3), np.float32)         # per plane, sum integral of nu hits
     nu_edep = np.zeros(n, np.float32)           # sum MC energy (MeV) on collection-plane hits
@@ -110,6 +127,8 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
     }
     if sbnd:
         H["tpc"] = _alloc(outdir, "hit_tpc", (n_hits,), np.uint8)
+    if wc_hit:
+        H["wc_main"] = _alloc(outdir, "hit_wc_main", (n_hits,), np.uint8)
     O = {
         "ch": _alloc(outdir, "oph_ch", (n_oph,), np.uint8),
         "t": _alloc(outdir, "oph_t", (n_oph,), np.float32),
@@ -122,7 +141,8 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
         hi = min(n, lo + chunk)
         r0 = hs[lo]
         h, hevt = rd("hit_table", lo, hi,
-                     ["hit_id", "local_plane", "local_wire", "local_time", "integral", "rms"] + (["tpc"] if sbnd else []))
+                     ["hit_id", "local_plane", "local_wire", "local_time", "integral", "rms"] + (["tpc"] if sbnd else [])
+                     + (["wc_main"] if wc_hit else []))
         nh = len(hevt)
         if nh:
             local = np.arange(nh) - (hs[hevt] - r0)
@@ -137,6 +157,8 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
             H["time"][sl] = np.clip(np.round(t * TIME_SCALE), 0, 65535)
             if sbnd:
                 H["tpc"][sl] = h["tpc"]
+            if wc_hit:
+                H["wc_main"][sl] = h["wc_main"] > 0
             H["integral"][sl] = np.clip(h["integral"], 0, 65000)
             H["rms"][sl] = np.clip(h["rms"], 0, 65000)
 
@@ -243,7 +265,7 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
     for d in (H, O):
         for v in d.values():
             np.save(_alloc.files.pop(id(v)), v)
-    stats.update(n_events=n, n_hits=n_hits, n_ophits=n_oph, source=os.path.abspath(path),
+    stats.update(n_events=n, n_hits=n_hits, n_ophits=n_oph, source=os.path.abspath(path), is_data=is_data,
                  ev_lo=ev_lo, ev_hi=ev_hi,
                  seconds=time.time() - t0)
     with open(os.path.join(outdir, "meta.json"), "w") as fo:
