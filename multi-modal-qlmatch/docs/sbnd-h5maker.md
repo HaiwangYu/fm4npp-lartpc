@@ -127,6 +127,8 @@ Requested changes, all done in sbnd-h5maker 0.3:
 
 ## Review 2: fine-tune test (fm4npp-lartpc_polaris, 2026-11-12)
 
+Issue comments: Polaris findings 6840433723; Aurora fix 6833078440. From 2026-11-13, both sides post a #11 comment after each iteration.
+
 qlfm runs on SBND (`QLFM_DETECTOR=sbnd`, fm4npp-lartpc eea8fe1). The 10k was split 80/10/10, with 6 runs of 3,000 steps on one A100.
 - The MicroBooNE-pretrained model, fine-tuned, beats scratch on every task: T1 charge-weighted hit F1 0.85 vs 0.60–0.70, T5 light MSE 0.66 vs 0.97. A frozen encoder does much worse on T1 (0.49).
 - No run is converged at 3,000 steps, and scratch is the furthest from it.
