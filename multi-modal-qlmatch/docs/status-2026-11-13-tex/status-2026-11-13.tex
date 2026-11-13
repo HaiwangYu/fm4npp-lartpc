@@ -367,8 +367,9 @@
       \begin{itemize}
         \item Sunny's 3D per-plane width factors in training: fine-tune rerun ($\approx$3 node-h) or full re-pretraining.
         \item Width randomisation or dropout, or no width input at all.
-        \item Beam-on/EXT as a sideband: checkpoint and cut selection, calibration.
-        \item Real data (beam-on, EXT) in SSL pretraining.
+        \item Wire-Cell as labeller: fine-tune on real data (beam-on/EXT) with Wire-Cell $\nu$ labels.
+        \item Pretrain on data-like sim, freeze the backbone, fine-tune on nominal (sim-like) sim.
+        \item Pretrain on real data, freeze the backbone, fine-tune on data-like sim.
       \end{itemize}
       \textbf{Samples}
       \begin{itemize}
