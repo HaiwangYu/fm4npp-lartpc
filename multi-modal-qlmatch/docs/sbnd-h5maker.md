@@ -125,6 +125,32 @@ Requested changes, all done in sbnd-h5maker 0.3:
 - **B (required): units.** The event times are now `nu_time_ns`, `beam_gate_start_ns` and `beam_gate_width_ns`, and a `units` attribute lists the units of every column.
 - **C (nice to have): simulation configuration.** The detsim and hit-finder settings are in `sbnd_detector.json` "simulation" and the `sim_config` attribute.
 
+## 96-process pilot (2026-11-14)
+
+Job 9088015 (debug, 1 node, 96 processes):
+- Input: 96 BNB CV aurora-r2 units not in the 10k (`sbnd-bnb-cv/pilot96/units.txt`), one unit per process, `--max-events 11`, so 1,056 events.
+- Result: all 96 rc 0, 4.7 min wall. `check_h5.py` finds no problems, and all events have WC output.
+- WC per-(tpc, plane) efficiency: mean 0.83–0.88 over files.
+
+| Per process | 24 processes/node (10k) | 96 processes/node (pilot) |
+|---|---|---|
+| Compile (cling) | 47 s | 94 s |
+| First event | 11 s | 20 s |
+| Later events | 1.90 s (median) | 2.50 s (median) |
+| CPU busy | 72–78% | 41% (includes the start-up) |
+| Max RSS | 2.1 GB (~500 events) | 1.0 GB (11 events) |
+| Node throughput | 12.6 events/s | 38 events/s (×3.0) |
+
+Each process is ~30% slower at 96, but the node does 3× the work. Memory is not a limit: 96 × 2.1 GB = 0.2 TB of the node's 1 TB.
+
+### Revised estimate for the full 922,815 events
+
+- **Node-hours:** steady state 922,815 × 2.50 s / 96 = 6.7 node-h. Start-up adds ~0.6 node-h (~1,850 parts of ~500 events, 115 s each). Tail effects add ~10%. Total **~8 node-h (7–10)**, about 2 h wall on 4 nodes.
+- **Disk:** the pilot gave 409 kB/event (the 10k gave 362). So **~0.35 TB (±30%)** on Flare, plus the same on Eagle.
+- **Not covered:** the steady phase lasted only ~3 min, and Lustre load from several nodes at once is untested. The first production job will be watched.
+
+`check_h5.py`'s WC check flagged 3 pilot files in which WC missed the neutrino in one TPC: all three planes were low together, with high purity. The check now flags a plane only when it is far below another plane of the same TPC, which is the signature of a channel-numbering bug.
+
 ## Review 2: fine-tune test (fm4npp-lartpc_polaris, 2026-11-12)
 
 Issue comments: Polaris findings 6840433723; Aurora fix 6833078440. From 2026-11-13, both sides post a #11 comment after each iteration.

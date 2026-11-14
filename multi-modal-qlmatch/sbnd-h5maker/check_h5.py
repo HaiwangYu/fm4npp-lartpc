@@ -147,9 +147,17 @@ def main():
             eff = float((w * (tr & sel)).sum() / max(1e-9, (w * tr).sum()))
             pur = float((w * (tr & sel)).sum() / max(1e-9, (w * sel).sum()))
             R["wc"]["by_tpc_plane_charge_weighted"]["tpc%d_plane%d" % (t_, p_)] = {
-                "eff": round(eff, 4), "purity": round(pur, 4), "selected_hits": int(sel.sum())}
-            if tr.sum() >= 50 and eff < 0.2:
-                problems.append("WC hit labels: tpc%d plane%d efficiency %.3f (channel numbering?)" % (t_, p_, eff))
+                "eff": round(eff, 4), "purity": round(pur, 4), "selected_hits": int(sel.sum()), "truth_hits": int(tr.sum())}
+    # a numbering bug hits single planes: flag a plane far below another plane of the same TPC. A WC miss of the whole
+    # neutrino lowers all three planes of a TPC together and is physics, not a bug.
+    bp = R["wc"]["by_tpc_plane_charge_weighted"]
+    for t_ in np.unique(tpc):
+        for p_ in np.unique(pl):
+            v = bp["tpc%d_plane%d" % (t_, p_)]
+            best = max(bp["tpc%d_plane%d" % (t_, q_)]["eff"] for q_ in np.unique(pl))
+            if v["truth_hits"] >= 50 and v["eff"] < 0.2 and best > 0.5:
+                problems.append("WC hit labels: tpc%d plane%d efficiency %.3f vs %.3f on another plane (channel numbering?)"
+                                % (t_, p_, v["eff"], best))
     R["problems"] = problems
     print(json.dumps(R, indent=1))
     if a.json:
