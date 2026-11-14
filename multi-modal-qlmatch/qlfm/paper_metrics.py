@@ -12,6 +12,7 @@
   T5  test MSE of the log1p PMT features (unchanged)
 
 python -m qlfm.paper_metrics truth           # one-off: $QLFM_WORK/paper/truth.npz (val light cut + T4 truth)
+Other corpora (SBND): set QLFM_CORPUS, QLFM_SPLITS, QLFM_LIGHT_STATS (r4_light_stats output) and QLFM_PAPER_TRUTH.
 python -m qlfm.paper_metrics RUN_DIR ...     # print the metrics of finished runs (multi-task or single-task)
 """
 import json
@@ -24,17 +25,18 @@ from sklearn.metrics import roc_auc_score
 from qlfm.evaluate import _softmax, metrics_for
 
 W = os.environ.get("QLFM_WORK", "/lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc-work")
-TRUTH = os.path.join(W, "paper", "truth.npz")
+TRUTH = os.environ.get("QLFM_PAPER_TRUTH", os.path.join(W, "paper", "truth.npz"))
 CUTS = (10, 20, 50, 100, 200, 500)          # round-4 grid (r4_light_stats.CUTS)
 T4_SHARE, T4_VIS = 0.05, 0.3
 
 
-def build_truth(corpus="$QLFM_WORK/cache/bnb,$QLFM_WORK/cache/nue", splits="$QLFM_WORK/cache/splits_all.npz"):
+def build_truth(corpus=os.environ.get("QLFM_CORPUS", "$QLFM_WORK/cache/bnb,$QLFM_WORK/cache/nue"),
+                splits=os.environ.get("QLFM_SPLITS", "$QLFM_WORK/cache/splits_all.npz")):
     from qlfm.data.dataset import Corpus
     from qlfm.data.labels import EV_KEYS, event_labels
     c, sp = Corpus(os.path.expandvars(corpus)), np.load(os.path.expandvars(splits))
     lab = event_labels({k: c.ev_array(k) for k in EV_KEYS})
-    ls = np.load(os.path.join(W, "r4", "light", "light_stats.npz"))
+    ls = np.load(os.environ.get("QLFM_LIGHT_STATS", os.path.join(W, "r4", "light", "light_stats.npz")))
     pe_win = ls["pe_win"]
     # T2 light cut on val (same procedure as r4_light_stats, which used test)
     elig, y = lab["evt_nu"]
