@@ -70,6 +70,8 @@ The default is ±1 RMS.
 | 2026-11-12 | Review 1 by fm4npp-lartpc_polaris | Approved for 10k once A and B are in; done in 0.3 (4077488). test10 rebuilt (job 9080764). |
 | 2026-11-12 | 10k BNB CV (job 9080765, capacity, 1 node, 24 processes) | 10,754 events, 21 files, 3.9 GB, 21 min wall. Copied to Eagle; fine-tune test requested from fm4npp-lartpc_polaris. |
 | 2026-11-12 | Review 2 (fine-tune test) | Format and truth fine; WC hit labels matched on only 2 of 6 (tpc, plane). Fixed in 0.4; test10 and 10k relabelled in place with `relabel_wc.py` and copied to Eagle again. |
+| 2026-11-14 | 96-process pilot (job 9088015) and Polaris full-pipeline test | Both passed ([pilot](#96-process-pilot-2026-11-14); Polaris [comment 6872306589](https://github.com/HaiwangYu/fm4npp-lartpc/issues/11#issuecomment-6872306589)). |
+| 2026-11-14 | Full production (job 9088268) | 922,788 events, 1,781 files, 349 GB, ~8.7 node-h. `check_h5.py` (job 9088503): no problems. Copied to Eagle 2026-11-15. See [Full production](#full-production-2026-11-14). |
 
 ### test10 summary (`check_h5.py`)
 
@@ -99,7 +101,7 @@ The default is ±1 RMS.
 | WC ν-cluster hit purity vs truth (all / main cluster) | 0.89 / 0.93 |
 | Size | 3.89 GB = 362 kB/event |
 
-## Estimate for the full sample (not run; needs the owner's approval)
+## Estimate for the full sample (made before the run)
 
 The full sample is the aurora-r2 production: 627,205 BNB CV + 268,865 νe CC + 26,745 NC Δ-radiative = 922,815 events.
 
@@ -181,6 +183,27 @@ Checks after the fix:
 - A fresh 0.4 conversion of test10 (job 9081816, rc 0) matches the relabelled 0.3 file in every dataset.
 - Polaris re-scored T1 with the fixed labels on the same 425 test events (ν vertex in the AV): WC ν clusters reach charge-weighted F1 0.912 (efficiency 0.892, purity 0.933) and per-event median 0.919. Fine-tuned qlfm reaches 0.852 / 0.836.
 - So WC leads by ~0.06 on T1 after 3,000 qlfm steps on 3.6k hit-labelled events. The per-event means are close (0.79 vs 0.77) because WC has no candidate in some events.
+
+## Full production (2026-11-14)
+
+The run used `pbs/make_parts.py`, `pbs/run-multi.pbs` and `pbs/node-many.sh`: job 9088268, capacity queue, 4 nodes × 96 processes, 06:05–08:15 UTC. Totals: 2 h 10 min wall, ~8.7 node-h, close to the ~8 estimated. All 1,781 parts (~500 events each) exited 0, and every expected event is present.
+
+| Sample | Events | Files | Size | kB/event | Hits/event | Hits on WC ν clusters | ν energy on collection hits |
+|---|---|---|---|---|---|---|---|
+| BNB CV | 627,205 | 1,191 | 228.1 GB | 364 | 12.4k | 3.5% | 92.3% |
+| νe CC | 268,839 | 536 | 111.1 GB | 413 | 13.5k | 11.4% | 89.7% |
+| NC Δ-radiative | 26,744 | 54 | 10.0 GB | 374 | 12.5k | 4.8% | 89.2% |
+| **Total** | **922,788** | **1,781** | **349 GB** | | | | |
+
+- **Event count:** 27 fewer than the 922,815 in the estimate. `make_parts.py` takes only units whose status is OK or PARTIAL.
+- **Smoke test:** before the run, νe CC and NC Δ-rad were tested on 12 events each (job 9088218): WC efficiency 0.88, no problems.
+- **Checks:** `check_h5.py` ran on every file (job 9088503, debug queue, 5 min with 64 in parallel). 0 files have problems, including the per-(tpc, plane) WC check. The JSON reports are saved next to each file as `*.h5.check.json`.
+- **Aurora location:** `/lus/flare/projects/neutrinoGPU/yuhw/fm4npp-lartpc-data/sbnd-{bnb-cv,nuecc,ncdr}/full/`. Run bookkeeping is in `full-run/` (`tasks.tsv`, `work/node*.{log,sampler}`).
+- **Polaris copy:** `/lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc-data/sbnd-{bnb-cv,nuecc,ncdr}/full/`, made by rsync on 2026-11-15, 02:51–03:45 UTC. File counts and byte totals match Aurora.
+- **Eagle space:** the neutrinoGPU project on Eagle has only ~14 TB of its 3 PB quota left.
+- **Overlap:** `sbnd-bnb-cv/{test10,10k,pilot96}` are subsets of the BNB CV full sample, so keep evaluation events out of training.
+- **Next:** fmlar_polaris was asked for a full-scale pre-train + fine-tune.
+- **Issue #11 comments:** [production summary 6888730254](https://github.com/HaiwangYu/fm4npp-lartpc/issues/11#issuecomment-6888730254).
 
 ## Notes for the qlfm side
 
