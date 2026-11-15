@@ -22,11 +22,12 @@ import sys
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
+from qlfm import geometry as G
 from qlfm.evaluate import _softmax, metrics_for
 
 W = os.environ.get("QLFM_WORK", "/lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc-work")
 TRUTH = os.environ.get("QLFM_PAPER_TRUTH", os.path.join(W, "paper", "truth.npz"))
-CUTS = (10, 20, 50, 100, 200, 500)          # round-4 grid (r4_light_stats.CUTS)
+CUTS = G.T2_PE_CUTS        # round-4 grid (r4_light_stats.CUTS); SBND grid in qlfm.geometry
 T4_SHARE, T4_VIS = 0.05, 0.3
 
 
@@ -42,7 +43,7 @@ def build_truth(corpus=os.environ.get("QLFM_CORPUS", "$QLFM_WORK/cache/bnb,$QLFM
     elig, y = lab["evt_nu"]
     va = sp["val"][elig[sp["val"]]]
     yv, pv = y[va], pe_win[va]
-    grid = np.unique(np.round(np.logspace(0, 3.5, 200)))
+    grid = np.unique(np.round(np.logspace(0, 3.5 + np.log10(CUTS[-1] / 500), 200)))   # MicroBooNE: 10**3.5
     ba = [0.5 * ((pv[yv == 1] >= g).mean() + (pv[yv == 0] < g).mean()) for g in grid]
     g_best = float(grid[int(np.argmax(ba))])
     cut = float(min(CUTS, key=lambda x: abs(np.log(x) - np.log(g_best))))

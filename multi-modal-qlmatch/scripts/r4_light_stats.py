@@ -28,7 +28,7 @@ from qlfm.data.labels import EV_KEYS, event_labels
 W = os.environ.get("QLFM_WORK", "/lus/eagle/projects/neutrinoGPU/yuhw/fm4npp-lartpc-work")
 WIN_LO, WIN_HI = G.BEAM_WINDOW_US   # MicroBooNE 3-6 us: truth nu time 3.1-4.7 us + 0.48 us flash lag, with margin
 T_LO, T_HI = G.LIGHT_EDGES[0], G.LIGHT_EDGES[-1]   # light-token window (MicroBooNE 0-24 us)
-CUTS = (10, 20, 50, 100, 200, 500)
+CUTS = G.T2_PE_CUTS
 
 
 TB = np.arange(T_LO, T_HI + 0.25, 0.25)
@@ -83,7 +83,7 @@ def main():
                          n_fail_class=np.bincount(yt[~p], minlength=3).tolist()))
     res["cuts"] = rows
     # chosen cut: best balanced accuracy (in-AV nu vs no-nu) over a fine scan, rounded to the CUTS grid
-    grid = np.unique(np.round(np.logspace(0, 3.5, 200)))
+    grid = np.unique(np.round(np.logspace(0, 3.5 + np.log10(CUTS[-1] / 500), 200)))   # MicroBooNE: 10**3.5
     ba = [0.5 * ((pe_win[te][yt == 1] >= g).mean() + (pe_win[te][yt == 0] < g).mean()) for g in grid]
     g_best = float(grid[int(np.argmax(ba))])
     res["best_balanced_cut"] = g_best

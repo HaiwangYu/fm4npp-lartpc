@@ -54,11 +54,12 @@ PMT_Y_SHIFT = 65.0             # added to PMT y for the Fourier position embeddi
 # PMT time bins (us on the beam-gate clock); fine around the expected neutrino flash (3-6 us in MicroBooNE)
 LIGHT_EDGES = (0.0, 1.0, 2.0, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 10.0, 12.0, 15.0, 19.0, 24.0)
 BEAM_WINDOW_US = (3.0, 6.0)
+T2_PE_CUTS = (10, 20, 50, 100, 200, 500)   # beam-window PE grid for the T2 bright-flash cut (round 4)
 
 
 def _load_sbnd(path):
     global N_WIRES, N_TICKS, TRIG_TICK, TICK_TO_CM, CATHODE_TICK, WIRE_PITCH_CM, AV, N_PMT, PMT_YZ, PMT_CH
-    global PMT_Y_SHIFT, LIGHT_EDGES, BEAM_WINDOW_US, N_TPC, TPC1_FLIP_TICK
+    global PMT_Y_SHIFT, LIGHT_EDGES, BEAM_WINDOW_US, T2_PE_CUTS, N_TPC, TPC1_FLIP_TICK
     d = json.load(open(path))
     assert d["detector"] == "SBND", path
     N_TPC = len(d["tpcs"])
@@ -80,6 +81,7 @@ def _load_sbnd(path):
     # shifted by -3 us, so the beam window (3-6 us there) becomes 0-3 us and the bin layout stays the same.
     LIGHT_EDGES = tuple(e - 3.0 for e in LIGHT_EDGES)
     BEAM_WINDOW_US = (0.0, 3.0)
+    T2_PE_CUTS = (100, 200, 500, 1000, 2000, 5000)   # 120 PMTs see ~10x more light (val best cut ~2.7k PE)
 
 
 if DETECTOR == "sbnd":
