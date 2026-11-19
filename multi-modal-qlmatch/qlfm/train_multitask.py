@@ -45,9 +45,15 @@ def get_args(argv=None):
     ap.add_argument("--late-light", type=int, default=0, help="as train_downstream (2 = strong late fusion)")
     ap.add_argument("--hit-feat", default="native", choices=["native", "raw", "none"])
     ap.add_argument("--pimm-prep", default="matched", choices=["matched", "legacy"])
-    ap.add_argument("--width", default="native", choices=["native", "meas", "const"],
+    ap.add_argument("--width", default="native", choices=["native", "meas", "meas3d", "const"],
                     help="hit widths in training and evaluation (#9): meas = simulated nu hits rescaled to data "
-                         "(qlfm.eval_perturb w_meas), const = every hit the same width (no width information)")
+                         "(qlfm.eval_perturb w_meas; meas3d = Sunny's 3D factors), const = every hit the same width "
+                         "(no width information)")
+    ap.add_argument("--freeze-blocks", type=int, default=-1,
+                    help="finetune mode (#13): freeze the backbone embeddings (layer 0) and blocks 1..K; -1 = none")
+    ap.add_argument("--lp-ft", type=int, default=0,
+                    help="finetune mode (#13): train only the heads for the first N optimizer steps, then fine-tune "
+                         "(LP-FT, Kumar et al. 2022)")
     ap.add_argument("--max-hits", type=int, default=None)
     ap.add_argument("--max-tokens", type=int, default=None)
     ap.add_argument("--label-frac", type=float, default=0.01)
@@ -111,7 +117,7 @@ class MultiTaskModel(nn.Module):
         return self
 
     def _bb(self, b):
-        frozen_all = self.mode == "frozen" and not any(p.requires_grad for p in self.backbone.parameters())
+        frozen_all = not any(p.requires_grad for p in self.backbone.parameters())
         with torch.no_grad() if frozen_all else contextlib.nullcontext():
             return self.backbone(b)
 
@@ -259,7 +265,12 @@ def main(argv=None):
         backbone.eval()
     lr = args.lr or {"finetune": 2e-4, "frozen": 1e-3}[args.mode]
     if args.mode == "finetune":
+        if args.freeze_blocks >= 0:              # partial freezing: embeddings + the first K blocks stay fixed
+            for n_, p in backbone.named_parameters():
+                if backbone.layer_id(n_) <= args.freeze_blocks:
+                    p.requires_grad_(False)
         opt = torch.optim.AdamW(layer_groups(model, lr, args.layer_decay), lr=lr)
+        tunable = [p for p in backbone.parameters() if p.requires_grad]
     else:
         opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=0.05)
         for g in opt.param_groups:
@@ -306,6 +317,9 @@ def main(argv=None):
         micro = 0
         for b in trl:
             b = to_device(b, dev)
+            if args.lp_ft and args.mode == "finetune":     # LP-FT: heads only for the first lp_ft steps
+                for p in tunable:
+                    p.requires_grad_(step >= args.lp_ft)
             if micro == 0:
                 for g in opt.param_groups:
                     w = min(1.0, (step + 1) / max(1, steps // 20))

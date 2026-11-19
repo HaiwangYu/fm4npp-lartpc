@@ -57,6 +57,10 @@ def get_args(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     # reference methods (round 2)
     ap.add_argument("--method", default="mae", choices=["mae", "fm4npp", "fm4npp_l", "sd", "jepa"])
+    ap.add_argument("--width", default="native", choices=["native", "meas", "meas3d", "const"],
+                    help="hit-width domain for pretraining (#13): meas/meas3d = simulated nu hits rescaled to data "
+                         "(qlfm.eval_perturb, the data-like domain D). The per-hit nu deposit is loaded only to pick "
+                         "the simulated hits; it is never a target.")
     ap.add_argument("--lr-abs", type=float, default=None, help="absolute lr (no batch scaling)")
     ap.add_argument("--clip", type=float, default=1.0)
     ap.add_argument("--max-hits", type=int, default=16384)
@@ -120,7 +124,15 @@ def lr_at(step, args, base):
 
 
 @torch.no_grad()
-def validate(mae, loader, dev, n_batches):
+def domain(b, width):
+    """Apply the hit-width domain (#13) to a device batch; native = unchanged."""
+    if width == "native":
+        return b
+    from qlfm.eval_perturb import perturb
+    return perturb(b, "w_" + width, 0.0)
+
+
+def validate(mae, loader, dev, n_batches, width="native"):
     mae.eval()
     state = torch.cuda.get_rng_state()
     torch.cuda.manual_seed(1234)                      # identical masks every validation
@@ -129,7 +141,7 @@ def validate(mae, loader, dev, n_batches):
         if i >= n_batches:
             break
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            out = mae(to_device(b, dev))
+            out = mae(domain(to_device(b, dev), width))
         for key, v in out.items():
             if key.startswith("loss"):
                 acc[key] = acc.get(key, 0.0) + float(v)
@@ -182,11 +194,12 @@ def main(argv=None):
         return
     model = DDP(mae, device_ids=[dev.index], find_unused_parameters=True) if world > 1 else mae
 
-    ds = EventDataset(corpus, train_idx)
+    truth = args.width != "native"                      # hit_nu_edep picks the simulated hits to transform
+    ds = EventDataset(corpus, train_idx, truth=truth)
     loader = torch.utils.data.DataLoader(
         ds, batch_size=args.bs, sampler=InfiniteSampler(len(ds), args.seed * 1000 + rank * 7 + step),
         collate_fn=collate, num_workers=args.workers, pin_memory=True, persistent_workers=True, prefetch_factor=4)
-    vds = EventDataset(corpus, val_idx[rank::world])
+    vds = EventDataset(corpus, val_idx[rank::world], truth=truth)
     vloader = torch.utils.data.DataLoader(vds, batch_size=args.bs, collate_fn=collate, num_workers=2)
     n_val_batches = len(vds) // args.bs
 
@@ -222,7 +235,7 @@ def main(argv=None):
     model.train()
     it = iter(loader)
     while step < args.steps:
-        b = to_device(next(it), dev)
+        b = domain(to_device(next(it), dev), args.width)
         for g in opt.param_groups:
             g["lr"] = lr_at(step, args, base_lr)
         if args.budget_h and steps_final is None:
@@ -264,7 +277,7 @@ def main(argv=None):
                 logf.flush()
             t_log, ev_log, acc, acc_n = time.time(), 0, {}, {}
         if step % args.val_every == 0 or step == args.steps:
-            v = validate(mae, vloader, dev, n_val_batches)
+            v = validate(mae, vloader, dev, n_val_batches, args.width)
             if dist.is_main():
                 rec = {"step": step, **{"val_" + k: x for k, x in v.items()}}
                 print(json.dumps(rec), flush=True)

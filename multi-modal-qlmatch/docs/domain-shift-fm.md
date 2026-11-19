@@ -72,12 +72,12 @@ Notes on this table:
 ## 5. Plan
 
 ### Phase 0: code (no compute)
-- [ ] **Data-like definition:** add Sunny's 3D per-plane factors (`F_MEAS_3D`, #9) as the D transform. Keep the 2D factors for comparison.
-- [ ] **D in pretraining:** `train_pretrain --width meas3d` applies the transform inside the MAE forward pass, as `train_multitask --width` does. This needs the per-hit ν deposit in the pretraining loader, used only to pick which hits to transform.
-- [ ] **Fine-tune modes** in `train_multitask`:
+- [x] **Data-like definition:** add Sunny's 3D per-plane factors (`F_MEAS_3D`, #9) as the D transform. Keep the 2D factors for comparison.
+- [x] **D in pretraining:** `train_pretrain --width meas3d` applies the transform inside the MAE forward pass, as `train_multitask --width` does. This needs the per-hit ν deposit in the pretraining loader, used only to pick which hits to transform.
+- [x] **Fine-tune modes** in `train_multitask`:
   - `--freeze-blocks k`: freeze the hit/light embeddings and the first k Transformer blocks; train the rest and the heads;
   - `--lp-ft N`: train the heads on the frozen backbone for N steps, then unfreeze;
-  - optional `--l2sp λ`: penalise drift from the pretrained weights (ref 2).
+  - optional `--l2sp λ`: penalise drift from the pretrained weights (ref 2). Not implemented yet.
 - [ ] **`qlfm/domain_probe.py`:** paired S/D feature sensitivity per layer (method a) and a per-layer domain probe (method b).
 
 ### Phase 1: pretraining in D (about 2 node-h)
@@ -134,10 +134,24 @@ The simulated shift says *which adaptation recipe* works. The next step is pretr
   - so the model does not learn "which run" instead of physics.
 - **Mixing:** decide how to mix real and overlay events in pretraining.
 
-## 9. Open questions
-1. **D definition:** Sunny's 3D factors (recommended, the newest measurement; the S/labels-D baselines then need a rerun) or the 2D factors (continuity with #9 and #10)?
-2. **Compute:** about 14 node-h for all phases. Approve, and run after or alongside SBND?
-3. **Model:** qlfm-M CL only, or also M C (and PTv3 with a width input; #12, fair comparison)?
+## 9. Decisions (owner, 2026-11-19)
+1. **D** = Sunny's 3D factors (`--width meas3d`). The oracle runs (labels in D) are redone with them.
+2. **Compute:** run alongside the full SBND run (#11) on the preemptable queue.
+3. **Model:** qlfm-M CL only.
+
+**Implementation choices:**
+- freeze-blocks = 6 (embeddings + 6 of 12 blocks frozen);
+- LP-FT = 2,000 head-only steps of the 6,000;
+- runs with labels in S train and select in S (no labelled D, as with real data). Their test in D comes from `eval_perturb --variants w_meas3d` (T1/T2) and the real-data check from `eval_external` (#10).
+
+Reused runs: pretrain S, full fine-tune s0–2 (`s3/mt/qlfm_M_CL/finetune`) and frozen s0 (`s3/mt/qlfm_M_CL/frozen`).
+
+**Jobs:**
+- D pretraining: 7862299.
+- Pretrain-S fine-tunes (11): 7862302.
+- Pretrain-D fine-tunes (15): submitted by `$QLFM_WORK/jobs/dshift_chain.sh` after the D pretraining.
+
+Outputs: `$QLFM_WORK/dshift/{pre,ft}/`.
 
 ## References
 1. Kumar et al., *Fine-Tuning can Distort Pretrained Features and Underperform Out-of-Distribution* (LP-FT), arXiv:2202.10054.

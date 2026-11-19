@@ -43,11 +43,15 @@ D_C = [388.0, 1165.0, 1941.0, 2718.0, 3494.0, 4271.0]          # drift bin centr
 F_MEAS = {2: [1.000, 0.972, 0.951, 0.936, 0.927, 0.919],         # Y
           1: [1.000, 0.982, 0.965, 0.952, 0.954, 0.955],         # V (provisional)
           0: [1.000, 0.969, 0.936, 0.916, 0.901, 0.895]}         # U (provisional)
+# Sunny's 3D-matched factors (#9, second round): per plane, same drift bins, normalised to 1 at the anode
+F_MEAS_3D = {2: [1.000, 0.967, 0.941, 0.926, 0.915, 0.903],      # Y
+             1: [1.000, 0.980, 0.954, 0.938, 0.942, 0.941],      # V
+             0: [1.000, 0.960, 0.922, 0.907, 0.892, 0.880]}      # U
 US_PER_TICK, V_DRIFT_CM_US, MAX_DRIFT_CM = 0.5, 0.1098, 256.35
 D_DATA, D_SIM, S0_US2 = 3.74e-6, 6.40e-6, 1.9                    # cm2/us, cm2/us, us2
 WIDTH_CONST = 4.0                                                # ticks, about the median hit rms
 
-VARIANTS = {"nominal": (None, 0.0), "w_meas": ("meas", 0.0), "w_diff": ("diff", 0.0),
+VARIANTS = {"nominal": (None, 0.0), "w_meas": ("meas", 0.0), "w_meas3d": ("meas3d", 0.0), "w_diff": ("diff", 0.0),
             "q-5": (None, -0.05), "q-2": (None, -0.02), "q+2": (None, 0.02), "q+5": (None, 0.05),
             "w_meas_q-5": ("meas", -0.05), "w_meas_q+5": ("meas", 0.05),
             "w_inv": ("inv", 0.0), "w_c98": ("c0.98", 0.0), "w_c95": ("c0.95", 0.0), "w_meas_all": ("meas_all", 0.0),
@@ -67,10 +71,10 @@ def width_factor(plane, tick, kind):
         return 1 / width_factor(plane, tick, "meas")
     if kind.startswith("c"):
         return torch.full_like(d, float(kind[1:]))
-    if kind == "meas":
+    if kind in ("meas", "meas3d"):
         xp = torch.tensor(D_C, device=tick.device)
         f = torch.ones_like(d)
-        for p, fp in F_MEAS.items():
+        for p, fp in (F_MEAS if kind == "meas" else F_MEAS_3D).items():
             m = plane == p
             f[m] = _interp(d[m], xp, torch.tensor(fp, device=tick.device))
         return f
