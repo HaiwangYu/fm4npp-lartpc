@@ -10,6 +10,23 @@ Throughout:
 
 ---
 
+## Summary by category
+
+| category | question it answers | items | status |
+|---|---|---|---|
+| **1. Measure the problem** | How much does the simulation mismatch move the scores, and where? | A1 (2D width test), A2 (Joshua's 3D, per-plane and light checks), A3 (V-plane variant), A4 (feature probes) | A1–A2 done, A3–A4 planned or queued |
+| **2. Labels in the data-like domain** | Upper bound: what if we had labelled data-like events? | B1 (fix b), B2 (sim→real), B3 (real→real) | B1 done; B2–B3 planned by Joshua and queued by Haiwang |
+| **3. Foundation-model paradigm** | Does pretraining in the data-like domain plus freezing stop sim labels teaching the width shortcut? | C1 (pretrain in D), C2 (real→sim, frozen/full), C3 (partial freezing, head-first), C4 (naive baseline), C5 (explicit invariance) | C3 running, rest queued or planned |
+| **4. Validate on real data** | Do the gains hold on real beam-on data? | D1 (first check), D2 (all new models), D3 (round-2 data), D4 (real-data pretraining) | D1 done; D3 awaits approval |
+| **5. SBND** | New detector, all-simulation testbed | E1 (10k tests), E2 (full run) | E2 running |
+| **6. Paper** | What can we fairly claim? | F1 (width fairness for PTv3), F2 (ME1 headline) | proposed |
+
+How the categories fit together:
+- **The core of the plan is category 3.** Category 2 supplies its upper bound and category 4 checks it against real data.
+- **Most overlap with Joshua's plan is in categories 2 and 3:** B2, B3, C1 and C2 are in both. The differences are that his data-like domain also corrects the light, and he pretrains on events kept apart from the labelled 1%. Merging them would save about 4–6 node-hours.
+
+---
+
 ## Overview
 
 | # | item | owner | purpose (category) | status | compute |
