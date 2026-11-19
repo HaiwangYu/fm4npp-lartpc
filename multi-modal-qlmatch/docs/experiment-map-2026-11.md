@@ -16,7 +16,7 @@ Throughout:
 |---|---|---|---|
 | **1. Measure the problem** | How much does the simulation mismatch move the scores, and where? | A1 (2D width test), A2 (Joshua's 3D, per-plane and light checks), A3 (V-plane variant), A4 (feature probes) | A1–A2 done, A3–A4 planned or queued |
 | **2. Labels in the data-like domain** | Upper bound: what if we had labelled data-like events? | B1 (fix b), B2 (sim→real), B3 (real→real) | B1 done; B2–B3 planned by Joshua and queued by Haiwang |
-| **3. Foundation-model paradigm** | Does pretraining in the data-like domain plus freezing stop sim labels teaching the width shortcut? | C1 (pretrain in D), C2 (real→sim, frozen/full), C3 (partial freezing, head-first), C4 (naive baseline), C5 (explicit invariance) | C3 running, rest queued or planned |
+| **3. Foundation-model paradigm** | Does pretraining in the data-like domain plus freezing stop sim labels teaching the width shortcut? | C1 (pretrain in D), C2 (real→sim, frozen/full), C3 (partial freezing, head-first), C4 (naive baseline), C5 (explicit invariance), C6 (self-training) | C3 running, rest queued or planned |
 | **4. Validate on real data** | Do the gains hold on real beam-on data? | D1 (first check), D2 (all new models), D3 (round-2 data), D4 (real-data pretraining) | D1 done; D3 awaits approval |
 | **5. SBND** | New detector, all-simulation testbed | E1 (10k tests), E2 (full run) | E2 running |
 | **6. Paper** | What can we fairly claim? | F1 (width fairness for PTv3), F2 (ME1 headline) | proposed |
@@ -43,6 +43,7 @@ How the categories fit together:
 | C3 | Partial freezing and head-first fine-tuning | H | 3. FM paradigm | running (S) / queued (D) | ~3 nh |
 | C4 | Naive reference: pretrain S, labels S, test in D | J + H | 3. FM paradigm (baseline) | exists; evaluation planned | eval only |
 | C5 | Explicit invariance (consistency loss, adversarial, feature removal) | H | 3. FM paradigm (if C1–C3 fail) | proposed (#13 phase 4) | ~5 nh |
+| C6 | Self-training: pseudo-labels from high-confidence predictions on unlabelled D (later real) events | H | 3. FM paradigm | noted 2026-11-19 (#13 phase 5) | ~3 nh |
 | D1 | First real-data check (beam-on/EXT vs Wire-Cell) | H | 4. Validate on real data | done (#10) | <1 nh |
 | D2 | Real-data check of every new model | H | 4. Validate on real data | planned (#13 phase 3; suggested for J) | <1 nh |
 | D3 | MicroBooNE round 2: more beam-on/EXT, clean overlay | FNAL session | 4. Validate on real data | awaiting approval | FNAL side |
@@ -181,6 +182,13 @@ This is the realistic setting. Unlabelled data exists in the target domain; labe
 - **Possible outcomes:**
   - A recipe that also works with real data (the unpaired variants).
   - Or evidence that the remaining gap is not width, which points to D4.
+
+### C6. Self-training with pseudo-labels, noted 2026-11-19 (Haiwang; #13 phase 5)
+- **Purpose:** use unlabelled target-domain events in the *supervised* step. Start from a small labelled sample, predict on unlabelled events, and add high-confidence predictions as new labels; repeat.
+- **Procedure:** labels in S (1%), unlabelled D pool. Each round: predict, keep confident hits/events with class-balanced thresholds, retrain on S labels + D pseudo-labels; 2–3 rounds. Pseudo-label purity is measured every round against D truth. Later the same loop on real beam-on/EXT, filtered by agreement with Wire-Cell.
+- **Possible outcomes:**
+  - Recovery beyond C2/C3, if confident predictions in D are mostly right.
+  - Or confirmation bias: the model's confident errors are the width shortcut itself (on real data an S-trained model confidently calls real ν hits cosmic). That would show self-training needs a D-robust starting model, or an independent filter such as Wire-Cell.
 
 ---
 

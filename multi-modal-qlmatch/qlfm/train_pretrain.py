@@ -192,6 +192,22 @@ def main(argv=None):
         if dist.is_main():
             print(f"already done ({step} steps)", flush=True)
         return
+    # single writer per output dir: a second job (e.g. a resubmission racing a running one) finds a fresh lock
+    # (heartbeat < 10 min, refreshed at every log step) and exits without touching the checkpoint
+    lock = os.path.join(args.out, "train.lock")
+    me = f"{os.environ.get('PBS_JOBID', 'nojob').split('.')[0]}@{os.uname().nodename}"
+    busy = torch.zeros(1, device=dev)
+    if dist.is_main() and os.path.exists(lock) and time.time() - os.path.getmtime(lock) < 600:
+        owner = open(lock).read().strip()
+        if owner.split("@")[0] != me.split("@")[0]:
+            print(f"output dir in use by {owner} (lock {lock}); exiting", flush=True)
+            busy += 1
+    if world > 1:
+        torch.distributed.broadcast(busy, 0)
+    if busy.item():
+        return
+    if dist.is_main():
+        open(lock, "w").write(me + "\n")
     model = DDP(mae, device_ids=[dev.index], find_unused_parameters=True) if world > 1 else mae
 
     truth = args.width != "native"                      # hit_nu_edep picks the simulated hits to transform
@@ -275,6 +291,7 @@ def main(argv=None):
                 print(json.dumps(rec), flush=True)
                 logf.write(json.dumps(rec) + "\n")
                 logf.flush()
+                os.utime(lock)                         # heartbeat for the single-writer lock
             t_log, ev_log, acc, acc_n = time.time(), 0, {}, {}
         if step % args.val_every == 0 or step == args.steps:
             v = validate(mae, vloader, dev, n_val_batches, args.width)
@@ -293,6 +310,8 @@ def main(argv=None):
     save()
     if dist.is_main():
         print(f"stopped at step {step}", flush=True)
+        if os.path.exists(lock):
+            os.remove(lock)
         if step >= args.steps:
             open(os.path.join(args.out, "done"), "w").write(f"{step}\n")
     dist.barrier()
