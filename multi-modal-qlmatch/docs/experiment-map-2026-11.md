@@ -1,0 +1,248 @@
+# Experiment map, November 2026: every planned training and test, grouped by purpose
+
+Status as of 2026-11-19. This covers Haiwang's work (the Polaris Claude session; issues #8–#13) and Joshua's A1 data/sim checks (rounds 2–3, `jpeterso/.../docs/a1_check_round_3_plan.md`).
+
+Throughout:
+- **S** ("sim", "sim-like") = the open-data overlay as published. Simulated ν hits are broader than the real cosmic hits around them.
+- **D** ("real", "data-like") = the same events with the simulated ν hit widths scaled by Sunny's measured 3D data/sim factors. Joshua's "real" also scales the beam light (`l_comb80`).
+- **T1** = ν hit tagging. **T2** = ν-event vs no-ν. **T3** = flavour. **T4** = energy. **T5** = light from charge.
+- **CL** = qlfm-M with light in pretraining. **C+XF** = charge-only pretraining, light added at the head.
+
+---
+
+## Overview
+
+| # | item | owner | purpose (category) | status | compute |
+|---|---|---|---|---|---|
+| A1 | Width/charge perturbation test (2D factors) | H | 1. Measure the problem | done (#9) | 1.6 nh |
+| A2 | 3D factors, per plane, light corrections, T5 target (inference) | J | 1. Measure the problem | done (round 2) | ~1 nh |
+| A3 | V-plane normalisation variant (`noVnorm`) | J | 1. Measure the problem | planned (round 3, part 1) | <1 nh |
+| A4 | Feature probes: which layers carry the width cue | H | 1. Measure the problem | queued (#13) | <1 nh |
+| B1 | Fine-tune with data-like or no width (fix b) | H | 2. Labels in D (reversed direction) | done (#9) | ~3 nh |
+| B2 | "sim→real": pretrain S, labels in D | J + H | 2. Labels in D (reversed direction) | planned (J) / queued (H: oracle runs) | J ~4 nh, H ~1.5 nh |
+| B3 | "real→real": pretrain D, labels in D | J + H | 2. Labels in D (control) | planned (J) / queued (H) | J ~1 nh, H ~1 nh |
+| C1 | Pretrain in D | J + H | 3. FM paradigm | queued (H: 7862299) / planned (J) | 2 nh each |
+| C2 | "real→sim": pretrain D, labels in S, frozen or full fine-tune | J + H | 3. FM paradigm | planned (J) / queued (H) | J ~4 nh, H ~2 nh |
+| C3 | Partial freezing and head-first fine-tuning | H | 3. FM paradigm | running (S) / queued (D) | ~3 nh |
+| C4 | Naive reference: pretrain S, labels S, test in D | J + H | 3. FM paradigm (baseline) | exists; evaluation planned | eval only |
+| C5 | Explicit invariance (consistency loss, adversarial, feature removal) | H | 3. FM paradigm (if C1–C3 fail) | proposed (#13 phase 4) | ~5 nh |
+| D1 | First real-data check (beam-on/EXT vs Wire-Cell) | H | 4. Validate on real data | done (#10) | <1 nh |
+| D2 | Real-data check of every new model | H | 4. Validate on real data | planned (#13 phase 3; suggested for J) | <1 nh |
+| D3 | MicroBooNE round 2: more beam-on/EXT, clean overlay | FNAL session | 4. Validate on real data | awaiting approval | FNAL side |
+| D4 | Pretraining on real data | – | 4. Real data in training | future (after #13) | TBD |
+| E1 | SBND 10k pipeline tests | H | 5. New detector | done (#11) | ~3 nh |
+| E2 | SBND full: pretrain M CL and M C, 13 fine-tunes | H | 5. New detector | running (7862256) | ~11 nh |
+| F1 | Fair width comparison: PTv3 with width, or no width anywhere | – | 6. Paper fairness | proposed (#12) | ~3 nh |
+| F2 | Paper ME1 headline (#8) | H | 6. Paper | depends on 1–4 | – |
+
+H = Haiwang (Polaris session), J = Joshua. "nh" = Polaris node-hours.
+
+**Overlaps:**
+- B2, B3, C1 and C2 are in both plans. They differ in the light correction (J includes `l_comb80`, H is width only) and the split (J pretrains on events disjoint from the labelled 1%; H reuses the standard pretraining set).
+- One shared set of D backbones would save about 4–6 nh.
+
+---
+
+## Category 1. Measure the problem: how much does the simulation mismatch move the scores?
+
+Inference only on already-trained models: perturb the inputs, re-evaluate, compare. This tells us *how big* and *where* the problem is, not how to fix it.
+
+### A1. Width and charge perturbation test (2D factors), done (#9)
+- **Purpose:** check Sunny's concern that the model scores by recognising "simulated-looking" ν hits.
+- **Procedure:**
+  - Scale simulated ν hit widths by the 2D data/sim factor, or charge by ±2/5%.
+  - Re-evaluate T1/T2 of every trained model.
+  - Controls: scale all hits, broaden instead of narrowing, apply a uniform 2% change.
+- **Outcome:**
+  - Charge: negligible.
+  - Width: CL loses 0.21 in T1. C+XF loses 0.03. PTv3 is unaffected (it ignores width).
+  - CL has learned a sharp width-vs-drift relation tuned to the over-diffused simulation.
+
+### A2. 3D factors, per plane, light corrections, T5 target, done (Joshua, round 2)
+- **Purpose:** refine A1 with Sunny's 3D factors, find which planes matter, and test light mismodelling.
+- **Procedure:**
+  - 3D width variants (all planes, Y only, U+V only), per-plane T1.
+  - Light variants: 0.80 PE scale, slow component, late tail, combined `l_comb80`, prompt-only.
+  - T5 target corrections.
+- **Outcome:**
+  - CL loses 0.29 in T1 with 3D factors (0.33 per-event median); U loses most. C+XF loses 0.04.
+  - Light corrections: ≤0.002 for CL, 0.01 for C+XF. C+XF relies on late light, CL does not.
+  - Light mismodelling explains 10–20% of the T5 ν/no-ν gap.
+
+### A3. V-plane normalisation variant, planned (Joshua, round 3, part 1)
+- **Purpose:** the V-plane factor has an unexplained 0.90 offset at the anode, normalised away in A2. This measures how much that choice matters.
+- **Procedure:** inference with the V factors not renormalised (V widths 10% smaller everywhere), plus V-only variants. Six existing models.
+- **Possible outcomes:**
+  - A clearly larger drop than A2. That is likely, since a uniform 2% change already costs 0.01. Then the definition of D carries a real systematic, and conclusions must be checked under both definitions.
+  - A small change. Then the definition of D is robust.
+
+### A4. Feature probes, queued (#13, `qlfm.domain_probe`)
+- **Purpose:** find *where* in the network the width cue lives, and whether data/sim-consistent features can be told apart from sim-only ones.
+- **Procedure:** run the same events in S and D through a pretrained backbone. Per layer, measure:
+  - how much the features change between S and D;
+  - how well a linear probe tells S from D;
+  - whether a ν/cosmic probe trained on S still works on D.
+
+  Done for the S- and D-pretrained backbones (and optionally fine-tuned ones).
+- **Possible outcomes:**
+  - Width information concentrated in early layers. Then partial freezing of those layers (C3) or removing it (C5) is promising.
+  - Width spread throughout. Then the representation itself must be trained to be invariant (C5).
+  - The D backbone carries less domain information than the S backbone. That would be evidence that pretraining in D helps.
+
+---
+
+## Category 2. Labels in the data-like domain ("reversed" direction)
+
+Train the task heads on D labels. This is possible here only because we can *create* labelled D events. With real data there are no labels, so these runs serve as **upper bounds and controls**, not as a recipe for real data.
+
+### B1. Fine-tune with data-like or no width ("fix b"), done (#9)
+- **Purpose:** first check of whether retraining with corrected widths restores performance.
+- **Procedure:** S-pretrained CL and C+XF, fine-tuned and tested with D widths (2D factors) or with width removed. 1% labels, 3 seeds.
+- **Outcome:**
+  - With D widths, CL recovers T1 0.914 (vs 0.922 nominal).
+  - With width removed, the CL lead disappears (0.829, PTv3's level).
+  - On real beam-on data (D1), D-width training recovers only part of the drop.
+
+### B2. "sim→real": pretrain S, fine-tune with labels in D, planned (J) / queued (H)
+- **Purpose:** upper bound when target-domain labels exist. Joshua's version adds the light correction; H's oracle runs use 3D width only.
+- **Procedure:**
+  - J: CL and C+XF, frozen and fine-tuned, 2 seeds, on a disjoint split.
+  - H: CL full fine-tune with 3D widths, 3 seeds (`dshift/ft/PS_oracleD`).
+- **Possible outcomes:** the score near the nominal one (as in B1) sets the "oracle" for the recovery fraction in category 3. A frozen S backbone doing much worse than a fine-tuned one shows the S features themselves encode the shortcut.
+
+### B3. "real→real": pretrain D, labels in D, planned (J) / queued (H)
+- **Purpose:** the fully in-domain reference, everything in D.
+- **Procedure:**
+  - J: CL and C+XF, frozen and fine-tuned, 1 seed.
+  - H: CL full fine-tune, 3 seeds (`PD_oracleD`).
+- **Possible outcomes:**
+  - If B3 is well above B2, pretraining in the target domain helps even with target labels.
+  - If they are equal, only the labels matter.
+
+---
+
+## Category 3. The foundation-model paradigm: pretrain in D, freeze, fine-tune on sim labels
+
+This is the realistic setting. Unlabelled data exists in the target domain; labels exist only in simulation. The question is whether pretraining in D, and how much of the backbone is frozen, keeps the sim labels from teaching the sim-only width shortcut.
+
+### C1. Pretraining in D, queued (H: job 7862299) / planned (J)
+- **Purpose:** the D-domain backbone that C2/C3/B3 start from.
+- **Procedure:** same recipe and steps as the existing S backbone (34k steps, about 2 nh), with simulated ν widths scaled inside pretraining.
+  - J: CL and C on a disjoint split; CL also with corrected light.
+  - H: CL only, width only.
+- **Possible outcomes:** pretraining loss similar to S (the domain is not harder). Feature probes (A4) show whether it encodes width differently.
+
+### C2. "real→sim": pretrain D, labels in S, frozen or full fine-tune, planned (J) / queued (H)
+- **Purpose:** the central test of the FM paradigm.
+- **Procedure:** fine-tune on S labels, select checkpoints on S validation (as with real data), test in D.
+  - J: CL and C+XF, frozen and fine-tuned, 2 seeds.
+  - H: CL, frozen and full, 3 seeds (`PD_frozen`, `PD_full`).
+- **Possible outcomes:**
+  - **Frozen recovers, full does not:** the D backbone is right, but full fine-tuning re-learns the shortcut. Use frozen or partial freezing.
+  - **Both recover:** pretraining in D is enough.
+  - **Neither recovers:** freezing doesn't remove width information. The head learns "unusual width = ν" from the frozen features, so explicit invariance (C5) is needed.
+
+### C3. Partial freezing and head-first fine-tuning, running (S) / queued (D) (H only)
+- **Purpose:** fill the gap between "frozen" and "full fine-tune". Published results disagree on which is more robust.
+- **Procedure:** from both S and D backbones, labels in S, 3 seeds:
+  - freeze the embeddings + the first 6 of 12 blocks;
+  - train only the heads for 2,000 steps, then everything.
+- **Possible outcomes:** identifies the least-damaging adaptation. Combined with A4, it shows whether freezing exactly the layers that carry width helps.
+
+### C4. Naive reference: pretrain S, labels S, test in D (existing models)
+- **Purpose:** the "do nothing" baseline that C2/C3 must beat.
+- **Procedure:** the existing paper-campaign models (CL and C+XF, frozen and fine-tuned), evaluated in D. Both plans include it.
+- **Outcome:** known approximately from A1/A2 (CL T1 about 0.63–0.71 in D).
+- **Main metric for category 3:** recovery fraction R = (score − naive) / (oracle − naive), with naive = C4 and oracle = B2/B3.
+
+### C5. Explicit invariance, proposed (#13 phase 4, only if C2/C3 fall short)
+- **Purpose:** make the model *unable* to use the sim-only cue, rather than hoping freezing does it.
+- **Procedure**, unlabelled D events used during fine-tuning:
+  - a paired S/D consistency loss;
+  - domain-adversarial training or feature alignment;
+  - projecting out the width-sensitive directions found in A4.
+- **Possible outcomes:**
+  - A recipe that also works with real data (the unpaired variants).
+  - Or evidence that the remaining gap is not width, which points to D4.
+
+---
+
+## Category 4. Validation on real data
+
+Everything in categories 1–3 uses a *modelled* data domain. These items check it against real MicroBooNE data.
+
+### D1. First real-data check, done (#10)
+- **Purpose:** do overlay-trained models find real neutrinos?
+- **Procedure:** 11 existing models on beam-on (849 events) and EXT (1,248) with Wire-Cell labels. Measured:
+  - agreement with Wire-Cell ν hits;
+  - beam-on pass rate at a fixed EXT rate (cosmic background held at Wire-Cell's 2.2%).
+- **Outcome:**
+  - Overlay: every model beats Wire-Cell and Pandora.
+  - Real data: Wire-Cell wins (8.2% beam-on pass rate). CL finds 18–24% of Wire-Cell's ν charge (90% on overlay).
+  - The drop follows each model's reliance on width: data-like widths 0.35–0.39, no width 0.63.
+
+### D2. Real-data check of every new model, planned
+- **Purpose:** test whether "robust in D" also means "better on real data", i.e. whether D is a good stand-in.
+- **Procedure:** run `eval_external` (about 1 GPU-minute per model) on all C2/C3/B2/B3 models; suggested for Joshua's runs too.
+- **Possible outcomes:**
+  - D-robust models also improve on beam-on: the modelled shift is a good proxy.
+  - They don't: other mismodelling (charge shape, simulated light, noise) matters, and real-data pretraining (D4) is necessary.
+
+### D3. MicroBooNE round 2 production, awaiting approval (FNAL session, #10)
+- **Purpose:** more statistics for D1/D2 (only 70 Wire-Cell-selected beam-on events today), and clean overlay events not in our training set.
+- **Procedure:** produce more beam-on/EXT; overlay from public files missing from the published HDF5 (BNB) and the two unused νe files.
+- **Possible outcomes:** firmer real-data numbers, and a real-data pool large enough for fine-tuning with Wire-Cell labels.
+
+### D4. Pretraining on real data, future
+- **Purpose:** the end goal of the FM paradigm.
+- **Procedure:** pretrain on beam-on/EXT (needs many more events and clean-up of run-dependent detector conditions), then fine-tune on simulation as in C2/C3.
+- **Possible outcome:** depends on what categories 3 and 4 show. They tell us which freezing and fine-tuning recipe to use.
+
+---
+
+## Category 5. New detector and scale: SBND (#11)
+
+### E1. SBND 10k pipeline tests, done
+- **Purpose:** check that the SBND files contain everything qlfm needs, and that MicroBooNE pretraining transfers.
+- **Outcome:**
+  - The pipeline passes end to end.
+  - MicroBooNE-pretrained CL fine-tuned on SBND: T1 0.85 vs 0.60–0.70 from scratch.
+  - Wire-Cell ν clusters: 0.91.
+
+### E2. SBND full sample, running
+- **Purpose:** a full-statistics SBND foundation model and an all-simulation testbed (no overlay, so no sim/real mixing inside events).
+- **Procedure:**
+  - Pretrain M CL (running, job 7862256) and M C (queued) on 738k events.
+  - 13 fine-tunes at 1% labels, T1–T5:
+    - SBND-pretrained CL fine-tuned ×3, frozen ×1;
+    - C+XF ×3;
+    - MicroBooNE-pretrained ×3;
+    - scratch ×3.
+- **Possible outcomes:**
+  - Whether an SBND-pretrained model beats MicroBooNE transfer and scratch.
+  - Whether it beats Wire-Cell on T1 (the 10k test had Wire-Cell ahead).
+  - T3 becomes a real 3-class test with the νe CC sample.
+
+---
+
+## Category 6. Paper fairness and claims
+
+### F1. Fair width comparison, proposed (#12)
+- **Purpose:** only qlfm reads hit width, so "qlfm beats PTv3" partly measures width use.
+- **Procedure:** add width as an input to PTv3 (and others), or remove width from all models.
+- **Possible outcomes:** a fair architecture comparison. If PTv3 with width gains as much as qlfm, the architecture claim weakens. Partly answered already: qlfm without width ≈ PTv3 (B1).
+
+### F2. Paper ME1 headline (#8)
+- **Purpose:** decide what the paper claims.
+- **Depends on:** whether the T1/T2 "light helps" result holds in D (category 3) and on real data (category 4). The choice slide in `status-2026-11-13.pdf` lists the options:
+  - A: open data only, simulated shift, with a caveat;
+  - B: plus real data with Wire-Cell labels;
+  - C: SBND simulation only.
+
+---
+
+## Decisions pending
+1. **Merge the overlapping parts of the two plans** (B2, B3, C1, C2): one shared set of D backbones, a common split convention, and a common evaluation (including D2).
+2. **D definition:** width only (H), or width + light (J). The light effect is ≤0.002 for CL, so this matters mainly for C+XF.
+3. **Pretraining split for the D backbones:** standard set (H, matches the existing S backbone) or disjoint from the labelled 1% (J, cleaner, `pre_r3`).
+4. **MicroBooNE round-2 production (D3), and F1.**
