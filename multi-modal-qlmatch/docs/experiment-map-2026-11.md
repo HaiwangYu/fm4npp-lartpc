@@ -43,7 +43,7 @@ How the categories fit together:
 | C3 | Partial freezing and head-first fine-tuning | H | 3. FM paradigm | running (S) / queued (D) | ~3 nh |
 | C4 | Naive reference: pretrain S, labels S, test in D | J + H | 3. FM paradigm (baseline) | exists; evaluation planned | eval only |
 | C5 | Explicit invariance (consistency loss, adversarial, feature removal) | H | 3. FM paradigm (if C1–C3 fail) | proposed (#13 phase 4) | ~5 nh |
-| C6 | Self-training: pseudo-labels from high-confidence predictions on unlabelled D (later real) events | H | 3. FM paradigm | noted 2026-11-19 (#13 phase 5) | ~3 nh |
+| C6 | Self-training with pseudo-labels (high-confidence predictions on unlabelled D / real events become labels) | H | 3. FM paradigm | idea noted (#13 phase 4b) | ~3 nh |
 | D1 | First real-data check (beam-on/EXT vs Wire-Cell) | H | 4. Validate on real data | done (#10) | <1 nh |
 | D2 | Real-data check of every new model | H | 4. Validate on real data | planned (#13 phase 3; suggested for J) | <1 nh |
 | D3 | MicroBooNE round 2: more beam-on/EXT, clean overlay | FNAL session | 4. Validate on real data | awaiting approval | FNAL side |
@@ -183,14 +183,15 @@ This is the realistic setting. Unlabelled data exists in the target domain; labe
   - A recipe that also works with real data (the unpaired variants).
   - Or evidence that the remaining gap is not width, which points to D4.
 
-### C6. Self-training with pseudo-labels, noted 2026-11-19 (Haiwang; #13 phase 5)
-- **Purpose:** use unlabelled target-domain events in the *supervised* step. Start from a small labelled sample, predict on unlabelled events, and add high-confidence predictions as new labels; repeat.
-- **Procedure:** labels in S (1%), unlabelled D pool. Each round: predict, keep confident hits/events with class-balanced thresholds, retrain on S labels + D pseudo-labels; 2–3 rounds. Pseudo-label purity is measured every round against D truth. Later the same loop on real beam-on/EXT, filtered by agreement with Wire-Cell.
+### C6. Self-training with pseudo-labels, idea noted (#13 phase 4b)
+- **Purpose:** use the unlabelled target-domain events directly. Start from a small labelled sample, predict on unlabelled D (later real) events, and add the high-confidence predictions as labels; iterate.
+- **Procedure:**
+  - 1% S labels plus a D pool, about 3 rounds of predict → threshold (class-balanced, calibrated) → retrain.
+  - Pseudo-label precision is measured in D (truth known) before the method is used on real data.
+  - On real data, Wire-Cell agreement serves as a second filter.
 - **Possible outcomes:**
-  - Recovery beyond C2/C3, if confident predictions in D are mostly right.
-  - Or confirmation bias: the model's confident errors are the width shortcut itself (on real data an S-trained model confidently calls real ν hits cosmic). That would show self-training needs a D-robust starting model, or an independent filter such as Wire-Cell.
-
----
+  - A practical path to real-data adaptation without real labels.
+  - Or confirmation bias. The S-trained model is confidently wrong on real ν hits, which argues for starting from the D-pretrained or width-free model.
 
 ## Category 4. Validation on real data
 

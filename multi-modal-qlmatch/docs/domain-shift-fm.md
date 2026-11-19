@@ -109,22 +109,30 @@ Diagnostics on the S- and D-pretrained backbones: paired sensitivity and domain-
 - [ ] DANN or CORAL with unlabelled D events (method c, unpaired). This is the version that carries over to real data.
 - [ ] Freeze or project out the most width-sensitive directions found in Phase 3, then fine-tune.
 
-### Phase 5 (noted 2026-11-19, Haiwang): self-training with pseudo-labels (C6)
-Start from a small labelled sample, predict on the unlabelled pool, add the high-confidence predictions as labels, retrain, and repeat. This is self-training or pseudo-labelling (refs 9–11). It is a way to bring unlabelled *target-domain* events (D here, later real beam-on/EXT) into the supervised step, not only into pretraining.
+### Phase 4b: self-training with pseudo-labels (idea noted 2026-11-19, not scheduled)
+Haiwang's idea:
+1. Start from a small labelled sample.
+2. Predict on unlabelled events of the target domain.
+3. Add the high-confidence predictions as labels.
+4. Retrain, and iterate.
 
-- **Simulated version (testable now, truth available):**
-  - labels in S (the usual 1%), unlabelled pool in D;
-  - each round: predict on the D pool, keep hits/events with confidence above a threshold (per class, e.g. top-x% or p > 0.95), retrain on S labels + D pseudo-labels;
-  - 2–3 rounds;
-  - evaluate in D. Because D truth exists, the pseudo-label purity can be measured every round.
-- **Main risk: confirmation bias.** A model's confident errors get reinforced. Here the confident errors are exactly the width shortcut: on real beam-on data an S-trained model is confidently wrong (it calls real ν hits cosmic). Mitigations:
-  - start from the most D-robust model available (full fine-tune, width-free, or D-pretrained, depending on Phases 2–3);
-  - class-balanced thresholds, so pseudo-labels don't collapse onto the majority (cosmic) class;
-  - calibrate thresholds on D validation (simulation) before using real data;
-  - a second, independent filter on real data: agreement with Wire-Cell ν hits (co-training), and consistency between hit labels and the event-level T2 prediction;
-  - a teacher–student setup with noise or augmentation (e.g. width jitter), so the student can't simply copy the teacher.
-- **Real-data version (later):** the same loop on beam-on/EXT (#10), with the Wire-Cell agreement filter. It needs the round-2 statistics.
-- **Cost:** about 1 node-h per round (multi-task fine-tune + prediction), so about 3 node-h for one 3-round loop.
+This is self-training or pseudo-labelling (refs 9–11). It fits the case "labels only in simulation, plenty of unlabelled data": D here, real beam-on/EXT later.
+- **Procedure (simulated shift first):**
+  - Labels: the 1% S labels.
+  - Unlabelled pool: D events from the train split.
+  - Each round: train → predict on the pool → keep hits/events with p > τ (or the top x% per class, so ν and cosmic stay balanced) → retrain on S labels + D pseudo-labels.
+  - About 3 rounds, compared with C2/C3 by the recovery fraction.
+  - In D the truth is known, so the precision of every pseudo-label round can be measured before the method is trusted on real data.
+- **Main risk: confirmation bias.**
+  - The S-trained model is *confidently wrong* in exactly the way that matters. On beam-on, the S-backbone frozen model finds only 9% of Wire-Cell's ν charge, and is likely sure that real ν hits are cosmics.
+  - Pseudo-labels from it would reinforce the width shortcut.
+- **Mitigations:**
+  - start from the most robust model (D-pretrained, or width-free);
+  - class-balanced and calibrated thresholds (calibrated on D validation);
+  - a teacher–student (EMA) scheme with strong augmentation, including width jitter;
+  - event-level consistency (hit labels consistent with the T2 prediction);
+  - on real data, agreement with Wire-Cell as a second, independent filter (co-training).
+- **Cost:** about 3 node-h per 3-round loop in D.
 
 ## 6. Metrics and success criteria
 - **Main:** T1 F1 in D for (pretrain D, labels S) vs (pretrain S, labels S), in the same fine-tune mode.
@@ -179,6 +187,6 @@ Outputs: `$QLFM_WORK/dshift/{pre,ft}/`.
 6. Louppe, Kagan, Cranmer, *Learning to Pivot with Adversarial Networks*, arXiv:1611.01046.
 7. Lee et al., *Surgical Fine-Tuning Improves Adaptation to Distribution Shifts*, arXiv:2210.11466.
 8. Shen et al., *Connect, Not Collapse: Explaining Contrastive Learning for Unsupervised Domain Adaptation*, arXiv:2204.00570.
-9. Lee, *Pseudo-Label: The Simple and Efficient Semi-Supervised Learning Method for Deep Neural Networks*, ICML 2013 workshop on challenges in representation learning.
+9. Lee, *Pseudo-Label: The Simple and Efficient Semi-Supervised Learning Method for Deep Neural Networks*, ICML 2013 workshop.
 10. Xie et al., *Self-training with Noisy Student improves ImageNet classification*, arXiv:1911.04252.
 11. Sohn et al., *FixMatch: Simplifying Semi-Supervised Learning with Consistency and Confidence*, arXiv:2001.07685.
