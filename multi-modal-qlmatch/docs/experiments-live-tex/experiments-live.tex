@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 14:10 UTC}
+\newcommand{\updated}{2026-11-20 14:41 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
 \newcommand{\PDfbReal}{\good{0.25}}
 \newcommand{\PDlpReal}{0.12}
@@ -117,7 +117,7 @@
     D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side after C2 & $\approx$3 h \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
-    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \que{} (7868514/5, 7868644) & $\approx$2 h after start \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \run{} (7868644) & $\approx$2 h after start \\
     D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
@@ -216,7 +216,7 @@
         \quad same models on real beam-on (share of WC $\nu$ charge) & & & 0.34 & \\
         C4, naive (measured)     & S & S / D & 0.631 $\pm$ 0.013 & 0.938 \\
         \midrule
-        B3                        & D & D / D & \multicolumn{2}{c}{\que{} (after C1)} \\
+        \textbf{B3} (seed 0; seeds 1--2 running) & D & D / D & \good{0.911} & 0.991 \\
         B2/B3, Joshua (width + light, CL and C+XF) & & & \multicolumn{2}{c}{\plan{} (round 3)} \\
         \bottomrule
       \end{tabular}}\\[2pt]
@@ -246,7 +246,7 @@
         fine-tune mode & pretrain & T1 in S & \textbf{T1 in D} & R & T2 in D & \textbf{real beam-on} \\
         \midrule
         full (C4, naive)           & S & 0.919 & 0.631 $\pm$ 0.013 & 0 & 0.938 & 0.20 \\
-                                   & D & \multicolumn{5}{c}{\que{} (preemptable 7868514/5)} \\
+                                   & D & 0.914$^\dagger$ & \multicolumn{4}{c}{test in D \que{} (7868690)} \\
         first 6 blocks frozen (C3) & S & 0.914 & 0.586 $\pm$ 0.012 & $-0.16$ & 0.913 & 0.16 \\
                                    & \textbf{D} & 0.896 & \good{0.762} $\pm$ 0.003 & \good{0.47} & \good{0.982} & \PDfbReal \\
         head-first, LP-FT (C3)     & S & 0.919 & 0.514 $\pm$ 0.009 & $-0.42$ & 0.911 & 0.10 \\
@@ -255,18 +255,18 @@
                                    & D & 0.854 & 0.677 $\pm$ 0.002 & 0.16 & \good{0.991} & \PDfrReal \\
         \midrule
         upper bound: labels in D (B2) & S & -- & \good{0.911} $\pm$ 0.001 & 1 & 0.994 & 0.34 \\
-                                   & D & \multicolumn{5}{c}{\que{} (B3)} \\
+                                   & D & -- & \good{0.911}$^\dagger$ & 1 & 0.991$^\dagger$ & \que \\
         \bottomrule
       \end{tabular}}\\[2pt]
-      {\tiny T1 charge-weighted F1, T2 AUC; same test events in S and D (\code{eval\_perturb w\_meas3d}). R = (T1 in D $-$ 0.631) / (0.911 $-$ 0.631). Real beam-on: share of Wire-Cell's $\nu$ charge the model also tags (overlay 0.87--0.90).}
+      {\tiny T1 charge-weighted F1, T2 AUC; same test events in S and D (\code{eval\_perturb w\_meas3d}). R = (T1 in D $-$ 0.631) / (0.911 $-$ 0.631). $^\dagger$ seed 0 only (seeds 1--2 running). Real beam-on: share of Wire-Cell's $\nu$ charge the model also tags (overlay 0.87--0.90).}
     \end{column}
     \begin{column}{0.42\textwidth}
       \begin{itemize}\setlength{\itemsep}{3pt}
         \item \textbf{Pretraining in D helps in D for every mode:} T1 $+0.19$ frozen, $+0.18$ 6 blocks frozen, $+0.06$ head-first; T2 in D 0.95--0.99.
         \item \textbf{Best: D backbone, 6 blocks frozen: T1 0.762 in D}, 47\% of the naive-to-upper-bound gap, with sim labels only.
-        \item \textbf{Head-first gains least:} unfreezing everything lets the sim labels re-teach the shortcut.
-        \item \textbf{Real beam-on improves less:} best 0.25 vs 0.20 naive (0.34 S upper bound, $\approx$0.6 width-free); beam-on pass rate drops. D is only part of the real shift.
-        \item \textbf{Pending:} D full fine-tune, D upper bound (B3), seed 2.
+        \item \textbf{Real beam-on improves less:} best 0.25 vs 0.20 naive; D is only part of the real shift.
+        \item \textbf{Upper bound from D (B3) = 0.911}, same as from S.
+        \item \textbf{Pending:} D full fine-tune in D (seed 0 test queued), seeds 1--2, seed 2 of the frozen modes.
       \end{itemize}
     \end{column}
   \end{columns}
