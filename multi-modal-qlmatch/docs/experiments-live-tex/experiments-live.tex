@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 18:27 UTC}
+\newcommand{\updated}{2026-11-20 21:40 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
 \newcommand{\PDfbReal}{\good{0.25}}
 \newcommand{\PDlpReal}{0.12}
@@ -94,11 +94,11 @@
     \midrule
     B1 & 2. labels in D & fine-tune with data-like or no width (2D) & H & \done & -- \\
     B2 & 2. labels in D & pretrain S, labels in D (``sim$\to$real'') & H / J & H \done / J \plan & J: round 3 \\
-    B3 & 2. labels in D & pretrain D, labels in D (``real$\to$real'') & H / J & \run{} (frozen done: T1 in D 0.677; preemptable 7868514/5) / \plan & $\approx$2 h after start \\
+    B3 & 2. labels in D & pretrain D, labels in D (``real$\to$real'') & H / J & \done{} (H, 3 seeds) / \plan & -- \\
     \midrule
     C1 & 3. FM paradigm & pretrain qlfm-M CL in D (34k steps; debug 7865226 + preemptable 7866343) & H / J & \done{} (H) & -- \\
-    C2 & 3. FM paradigm & pretrain D, labels S, frozen / full (``real$\to$sim'') & H / J & \run{} (6/15 done; preemptable 7868514/5) / \plan & $\approx$2 h after start \\
-    C3 & 3. FM paradigm & partial freezing (6 blocks), head-first (LP-FT) & H & S \done; D 4/6 \done{} (best T1 in D 0.762) & $\approx$2 h after start \\
+    C2 & 3. FM paradigm & pretrain D, labels S, frozen / full (``real$\to$sim'') & H / J & \done{} (H, 3 seeds; full 0.652, frozen 0.684 in D) / \plan & -- \\
+    C3 & 3. FM paradigm & partial freezing (6 blocks), head-first (LP-FT) & H & S, D \done{} (best T1 in D 0.767) & -- \\
     C4 & 3. FM paradigm & naive: pretrain S, labels S, test in D & H / J & \done{} (H) & -- \\
     C5 & 3. FM paradigm & explicit invariance (consistency, adversarial) & H & \prop & only if C2/C3 fall short \\
     \bottomrule
@@ -216,7 +216,7 @@
         \quad same models on real beam-on (share of WC $\nu$ charge) & & & 0.34 & \\
         C4, naive (measured)     & S & S / D & 0.631 $\pm$ 0.013 & 0.938 \\
         \midrule
-        \textbf{B3} (seed 0; seeds 1--2 running) & D & D / D & \good{0.911} & 0.991 \\
+        \textbf{B3} (3 seeds) & D & D / D & \good{0.910 $\pm$ 0.001} & 0.989 \\
         B2/B3, Joshua (width + light, CL and C+XF) & & & \multicolumn{2}{c}{\plan{} (round 3)} \\
         \bottomrule
       \end{tabular}}\\[2pt]
@@ -240,34 +240,34 @@
     \begin{column}{0.56\textwidth}
       \centering
       \scriptsize
-      qlfm-M CL, \textbf{labels in S} (sim), 1\% labels; pretrained in \textbf{S} (existing \code{pre/m\_cl\_f0.90}, 3 seeds) or in \textbf{D} (new, 2 seeds so far); tested in S, in \textbf{D} and on real data\\[2pt]
+      qlfm-M CL, \textbf{labels in S} (sim), 1\% labels; pretrained in \textbf{S} (existing \code{pre/m\_cl\_f0.90}, 3 seeds) or in \textbf{D} (new, 3 seeds); tested in S, in \textbf{D} and on real data\\[2pt]
       \fitw{\begin{tabular}{llccccc}
         \toprule
         fine-tune mode & pretrain & T1 in S & \textbf{T1 in D} & R & T2 in D & \textbf{real beam-on} \\
         \midrule
         full (C4, naive)           & S & 0.919 & 0.631 $\pm$ 0.013 & 0 & 0.938 & 0.20 \\
-                                   & D & 0.914$^\dagger$ & 0.651$^\dagger$ & 0.07 & 0.883$^\dagger$ & 0.19$^\dagger$ \\
+                                   & D & 0.913 & 0.652 $\pm$ 0.001 & 0.08 & 0.921 & 0.19$^\dagger$ \\
         first 6 blocks frozen (C3) & S & 0.914 & 0.586 $\pm$ 0.012 & $-0.16$ & 0.913 & 0.16 \\
-                                   & \textbf{D} & 0.896 & \good{0.762} $\pm$ 0.003 & \good{0.47} & \good{0.982} & \PDfbReal \\
+                                   & \textbf{D} & 0.895 & \good{0.767} $\pm$ 0.007 & \good{0.49} & \good{0.985} & \PDfbReal \\
         head-first, LP-FT (C3)     & S & 0.919 & 0.514 $\pm$ 0.009 & $-0.42$ & 0.911 & 0.10 \\
-                                   & D & 0.915 & 0.575 $\pm$ 0.001 & $-0.20$ & 0.954 & \PDlpReal \\
+                                   & D & 0.914 & 0.577 $\pm$ 0.002 & $-0.19$ & 0.954 & \PDlpReal \\
         frozen                     & S & 0.895 & \bad{0.485} $\pm$ 0.002 & $-0.52$ & 0.974 & \bad{0.09} \\
-                                   & D & 0.854 & 0.677 $\pm$ 0.002 & 0.16 & \good{0.991} & \PDfrReal \\
+                                   & D & 0.854 & 0.684 $\pm$ 0.011 & 0.19 & \good{0.991} & \PDfrReal \\
         \midrule
         upper bound: labels in D (B2) & S & -- & \good{0.911} $\pm$ 0.001 & 1 & 0.994 & 0.34 \\
-                                   & D & -- & \good{0.911}$^\dagger$ & 1 & 0.991$^\dagger$ & 0.30$^\dagger$ \\
+                                   & D & -- & \good{0.910} $\pm$ 0.001 & 1 & 0.989 & 0.30$^\dagger$ \\
         \bottomrule
       \end{tabular}}\\[2pt]
-      {\tiny T1 charge-weighted F1, T2 AUC; same test events in S and D (\code{eval\_perturb w\_meas3d}). R = (T1 in D $-$ 0.631) / (0.911 $-$ 0.631). $^\dagger$ seed 0 only (seeds 1--2 running). Real beam-on: share of Wire-Cell's $\nu$ charge the model also tags (overlay 0.87--0.90).}
+      {\tiny T1 charge-weighted F1, T2 AUC; same test events in S and D (\code{eval\_perturb w\_meas3d}). R = (T1 in D $-$ 0.631) / (0.911 $-$ 0.631). $^\dagger$ real beam-on: seed 0 (D) or seeds 0--1, updating. Real beam-on: share of Wire-Cell's $\nu$ charge the model also tags (overlay 0.87--0.90).}
     \end{column}
     \begin{column}{0.42\textwidth}
       \begin{itemize}\setlength{\itemsep}{3pt}
-        \item \textbf{Pretraining in D helps in D:} T1 $+0.19$ frozen, $+0.18$ 6 blocks frozen, $+0.06$ head-first, only $+0.02$ full fine-tune.
-        \item \textbf{Best: D backbone, 6 blocks frozen: T1 0.762 in D}, 47\% of the naive-to-upper-bound gap, with sim labels only.
-        \item \textbf{Full fine-tuning erases most of the D-pretraining gain} (0.651 vs 0.631; T2 in D worse): freeze part of the D backbone.
+        \item \textbf{Pretraining in D helps in D:} T1 $+0.20$ frozen, $+0.18$ 6 blocks frozen, $+0.06$ head-first, only $+0.02$ full fine-tune (3 seeds).
+        \item \textbf{Best: D backbone, 6 blocks frozen: T1 0.767 in D}, 49\% of the naive-to-upper-bound gap, with sim labels only.
+        \item \textbf{Full fine-tuning erases most of the D-pretraining gain} (0.652 vs 0.631; T2 in D 0.92 vs 0.94): freeze part of the D backbone.
         \item \textbf{Real beam-on improves less:} best 0.25 vs 0.20 naive; D is only part of the real shift.
-        \item \textbf{Upper bound from D (B3) = 0.911}, same as from S.
-        \item \textbf{Pending:} seeds 1--2 of full and upper bound, seed 2 of the frozen modes.
+        \item \textbf{Upper bound from D (B3) = 0.910}, same as from S.
+        \item \textbf{All 3 seeds done} in D; real beam-on for seeds 1--2 updating.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -437,7 +437,7 @@
   \begin{enumerate}\setlength{\itemsep}{4pt}
     \item \textbf{Measure the problem: clear.} Hit width is the dominant data/sim mismatch; charge and light corrections are small for T1/T2. qlfm-M CL is the most width-sensitive ($-0.29$ T1 with 3D factors). The network amplifies the width difference to nearly perfect S/D separability by mid-depth.
     \item \textbf{Labels in the data-like domain: clear.} With labelled data-like events, the simulation score comes back (0.911 vs 0.919). That is an upper bound, not a recipe for real data. On real data, 2D data-like training recovered only part of the gap.
-    \item \textbf{FM paradigm: first positive result in D, weaker on real data.} From the S backbone every freezing mode transfers worse to D. From the D backbone, \emph{partial} freezing transfers best: 6 blocks frozen 0.762 in D (47\% of the gap, sim labels only), while full fine-tuning gives back most of the gain (0.651 vs 0.631). On real beam-on the gain is smaller (0.25 vs 0.20). \textit{Haiwang to summarise once all seeds finish.}
+    \item \textbf{FM paradigm: clear in D, weak on real data so far.} In D (3 seeds): from the S backbone every freezing mode transfers worse; from the D backbone \emph{partial} freezing transfers best (6 blocks frozen 0.767, 49\% of the gap, sim labels only), while full fine-tuning gives the gain back (0.652 vs 0.631). On real beam-on the gain is small (0.25 vs 0.20). \textit{Haiwang to confirm the summary.}
     \item \textbf{Real-data validation: clear for now.} Overlay results overstate real-data performance; Wire-Cell wins on beam-on. The D test ranks methods the same way as real data, but recovering in D (0.911) brings only 0.34 on real data: the modelled width shift is a partial proxy. Fine-tuning on $\approx$1,900 WC-labelled real events (D5) does not help yet: too few $\nu$ events (98).
     \item \textbf{SBND: clear.} SBND pretraining gives the best model (T1 0.921, 3 seeds) ahead of MicroBooNE transfer (0.903) and scratch (0.804), and nearly matches Wire-Cell (0.931) at 1\% labels. Light in pretraining beats light at the head here too. Open: the data/sim question for SBND.
     \item \textbf{Paper fairness: not clear.} The width-fair comparison (F1) has not been run, and the ME1 headline depends on categories 3--4. \textit{Haiwang to summarise.}
