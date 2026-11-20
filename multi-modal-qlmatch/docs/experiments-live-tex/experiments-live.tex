@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 14:44 UTC}
+\newcommand{\updated}{2026-11-20 15:14 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
 \newcommand{\PDfbReal}{\good{0.25}}
 \newcommand{\PDlpReal}{0.12}
@@ -117,7 +117,7 @@
     D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side after C2 & $\approx$3 h \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
-    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \run{} (7868644) & $\approx$2 h after start \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \run{} (7868644, 7868754) & $\approx$2 h after start \\
     D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
@@ -246,7 +246,7 @@
         fine-tune mode & pretrain & T1 in S & \textbf{T1 in D} & R & T2 in D & \textbf{real beam-on} \\
         \midrule
         full (C4, naive)           & S & 0.919 & 0.631 $\pm$ 0.013 & 0 & 0.938 & 0.20 \\
-                                   & D & 0.914$^\dagger$ & 0.651$^\dagger$ & 0.07 & 0.883$^\dagger$ & \que \\
+                                   & D & 0.914$^\dagger$ & 0.651$^\dagger$ & 0.07 & 0.883$^\dagger$ & 0.19$^\dagger$ \\
         first 6 blocks frozen (C3) & S & 0.914 & 0.586 $\pm$ 0.012 & $-0.16$ & 0.913 & 0.16 \\
                                    & \textbf{D} & 0.896 & \good{0.762} $\pm$ 0.003 & \good{0.47} & \good{0.982} & \PDfbReal \\
         head-first, LP-FT (C3)     & S & 0.919 & 0.514 $\pm$ 0.009 & $-0.42$ & 0.911 & 0.10 \\
@@ -255,7 +255,7 @@
                                    & D & 0.854 & 0.677 $\pm$ 0.002 & 0.16 & \good{0.991} & \PDfrReal \\
         \midrule
         upper bound: labels in D (B2) & S & -- & \good{0.911} $\pm$ 0.001 & 1 & 0.994 & 0.34 \\
-                                   & D & -- & \good{0.911}$^\dagger$ & 1 & 0.991$^\dagger$ & \que \\
+                                   & D & -- & \good{0.911}$^\dagger$ & 1 & 0.991$^\dagger$ & 0.30$^\dagger$ \\
         \bottomrule
       \end{tabular}}\\[2pt]
       {\tiny T1 charge-weighted F1, T2 AUC; same test events in S and D (\code{eval\_perturb w\_meas3d}). R = (T1 in D $-$ 0.631) / (0.911 $-$ 0.631). $^\dagger$ seed 0 only (seeds 1--2 running). Real beam-on: share of Wire-Cell's $\nu$ charge the model also tags (overlay 0.87--0.90).}
