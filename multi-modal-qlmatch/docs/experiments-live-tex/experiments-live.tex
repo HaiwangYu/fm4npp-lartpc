@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 13:33 UTC}
+\newcommand{\updated}{2026-11-20 14:10 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
 \newcommand{\PDfbReal}{\good{0.25}}
 \newcommand{\PDlpReal}{0.12}
@@ -103,7 +103,7 @@
     C5 & 3. FM paradigm & explicit invariance (consistency, adversarial) & H & \prop & only if C2/C3 fall short \\
     \bottomrule
   \end{tabular}}\\[4pt]
-  \raggedright{\tiny H = Haiwang (Polaris session), J = Joshua. Job IDs are Polaris PBS jobs. From 19 Nov all new jobs charge the \textbf{LArTPC\_FM} allocation (5.0k node-h, ends 2027-01-10). D side: backbone done (2 node-h). Remaining D fine-tunes and D5 folds run on 2-node preemptable jobs 7868514/7868515; their tests in D and on real data follow automatically.}
+  \raggedright{\tiny H = Haiwang (Polaris session), J = Joshua. Job IDs are Polaris PBS jobs. From 19 Nov all new jobs charge the \textbf{LArTPC\_FM} allocation (5.0k node-h, ends 2027-01-10). D side: backbone done (2 node-h). Remaining D fine-tunes and D5 folds run on 2-node preemptable jobs 7868514/7868515 and debug 7868644; their tests in D and on real data follow automatically.}
 \end{frame}
 
 \begin{frame}{Status board (2/2)}
@@ -117,7 +117,7 @@
     D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side after C2 & $\approx$3 h \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
-    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \que{} (7868514/5) & $\approx$2 h after start \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \que{} (7868514/5, 7868644) & $\approx$2 h after start \\
     D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
