@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 09:45 UTC}
+\newcommand{\updated}{2026-11-20 13:07 UTC}
 
 \title{qlfm experiments: live status}
 \subtitle{Planned, running and finished tests, with results and takeaways}
@@ -86,20 +86,20 @@
     A1 & 1. measure & width/charge perturbation, 2D factors & H & \done & -- \\
     A2 & 1. measure & 3D factors, per plane, light corrections, T5 target & J & \done & -- \\
     A3 & 1. measure & V-plane factor not renormalised (\texttt{noVnorm}) & J & \plan & Joshua's round 3 \\
-    A4 & 1. measure & feature probes per layer (S and D backbones) & H & S \done, D \que{} (7865266) & after C1 \\
+    A4 & 1. measure & feature probes per layer (S and D backbones) & H & S \done, D \done & -- \\
     \midrule
     B1 & 2. labels in D & fine-tune with data-like or no width (2D) & H & \done & -- \\
     B2 & 2. labels in D & pretrain S, labels in D (``sim$\to$real'') & H / J & H \done / J \plan & J: round 3 \\
-    B3 & 2. labels in D & pretrain D, labels in D (``real$\to$real'') & H / J & \que{} (7865266) / \plan & $\approx$1.5 h after C1 \\
+    B3 & 2. labels in D & pretrain D, labels in D (``real$\to$real'') & H / J & \run{} (6/15 done; preemptable 7868514/5) / \plan & $\approx$2 h after start \\
     \midrule
-    C1 & 3. FM paradigm & pretrain qlfm-M CL in D (debug job 7865226, 2 nodes) & H / J & \que{} (LArTPC\_FM) & $\approx$1 h after start \\
-    C2 & 3. FM paradigm & pretrain D, labels S, frozen / full (``real$\to$sim'') & H / J & \que{} (7865266) / \plan & $\approx$1.5 h after C1 \\
-    C3 & 3. FM paradigm & partial freezing (6 blocks), head-first (LP-FT) & H & S \done{} (incl.\ D and real data), D \que{} (7865266) & D: $\approx$1.5 h after C1 \\
+    C1 & 3. FM paradigm & pretrain qlfm-M CL in D (34k steps; debug 7865226 + preemptable 7866343) & H / J & \done{} (H) & -- \\
+    C2 & 3. FM paradigm & pretrain D, labels S, frozen / full (``real$\to$sim'') & H / J & \run{} (6/15 done; preemptable 7868514/5) / \plan & $\approx$2 h after start \\
+    C3 & 3. FM paradigm & partial freezing (6 blocks), head-first (LP-FT) & H & S \done{} (incl.\ D and real data), D 4/6 \done & $\approx$2 h after start \\
     C4 & 3. FM paradigm & naive: pretrain S, labels S, test in D & H / J & \done{} (H) & -- \\
     C5 & 3. FM paradigm & explicit invariance (consistency, adversarial) & H & \prop & only if C2/C3 fall short \\
     \bottomrule
   \end{tabular}}\\[4pt]
-  \raggedright{\tiny H = Haiwang (Polaris session), J = Joshua. Job IDs are Polaris PBS jobs. From 19 Nov all new jobs charge the \textbf{LArTPC\_FM} allocation (5.0k node-h, ends 2027-01-10). D side: debug job 7865226 pretrains in D (C1); prod job 7865266 (10 nodes, 3 h) starts after it and runs C2/C3/B3 and their tests in D and on real data.}
+  \raggedright{\tiny H = Haiwang (Polaris session), J = Joshua. Job IDs are Polaris PBS jobs. From 19 Nov all new jobs charge the \textbf{LArTPC\_FM} allocation (5.0k node-h, ends 2027-01-10). D side: backbone done (2 node-h). Remaining D fine-tunes and D5 folds run on 2-node preemptable jobs 7868514/7868515; their tests in D and on real data follow automatically.}
 \end{frame}
 
 \begin{frame}{Status board (2/2)}
@@ -110,10 +110,10 @@
     id & category & test & owner & status & finish (target) \\
     \midrule
     D1 & 4. real data & first beam-on/EXT check vs Wire-Cell (11 models) & H & \done & -- \\
-    D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side \que{} (7865266) & D: with C2 \\
+    D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side after C2 & $\approx$3 h \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
-    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (2 requeued); D arm \que{} (7865266/7867974) & D: with C2 \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \que{} (7868514/5) & $\approx$2 h after start \\
     D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
@@ -160,33 +160,34 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{1. Measure the problem: where the width cue lives (A4, S backbone)}
+\begin{frame}{1. Measure the problem: where the width cue lives (A4: S vs D backbone)}
   \footnotesize
   \begin{columns}[T]
-    \begin{column}{0.52\textwidth}
+    \begin{column}{0.54\textwidth}
       \centering
       \scriptsize
-      Existing S-pretrained qlfm-M CL, 400 test events, same events in S and D\\[2pt]
-      \fitw{\begin{tabular}{lccccc}
+      Pretrained qlfm-M CL backbones (no fine-tuning), 400 test events, same events in S and D; \textbf{S backbone / D backbone}\\[2pt]
+      \fitw{\begin{tabular}{lcccc}
         \toprule
-        layer & \multicolumn{2}{c}{$|z_D - z_S| / |z_S|$} & S-vs-D probe & \multicolumn{2}{c}{$\nu$/cosmic probe trained on S} \\
-              & $\nu$ tokens & cosmic tokens & AUC & tested on S & tested on D \\
+        layer & $|z_D - z_S| / |z_S|$ & S-vs-D probe & \multicolumn{2}{c}{$\nu$/cosmic probe trained on S} \\
+              & $\nu$ tokens & AUC & tested on S & \textbf{tested on D} \\
         \midrule
-        embedding & 0.05 & 0.00 & 0.66 & 0.75 & 0.70 \\
-        block 2   & 0.15 & 0.00 & 0.78 & 0.93 & 0.89 \\
-        block 4   & 0.24 & 0.01 & 0.91 & 0.98 & 0.92 \\
-        block 6   & \bad{0.33} & 0.02 & \bad{0.95} & 0.98 & 0.89 \\
-        block 9   & 0.29 & 0.04 & 0.95 & 0.98 & 0.89 \\
-        block 12  & 0.23 & 0.03 & 0.94 & 0.98 & 0.89 \\
+        embedding & 0.05 / 0.05 & 0.66 / 0.66 & 0.75 / 0.74 & 0.70 / 0.70 \\
+        block 2   & 0.15 / 0.14 & 0.78 / 0.82 & 0.93 / 0.92 & 0.89 / 0.87 \\
+        block 4   & 0.24 / 0.22 & 0.91 / 0.91 & 0.98 / 0.96 & 0.92 / \good{0.96} \\
+        block 6   & 0.33 / 0.30 & 0.95 / 0.94 & 0.98 / 0.97 & \bad{0.89} / \good{0.97} \\
+        block 9   & 0.29 / 0.27 & 0.94 / 0.94 & 0.98 / 0.97 & \bad{0.89} / \good{0.97} \\
+        block 12  & 0.23 / 0.21 & 0.94 / 0.94 & 0.98 / 0.97 & \bad{0.89} / \good{0.97} \\
         \bottomrule
       \end{tabular}}\\[2pt]
-      {\tiny 54.6k $\nu$ tokens ($\ge$50\% $\nu$ charge), 760k cosmic tokens. Probes: logistic regression, split by event.}
+      {\tiny $\nu$ tokens: $\ge$50\% $\nu$ charge (54.6k); cosmic tokens 760k. Probes: logistic regression, split by event. Cosmic-token changes $\le$0.04 for both.}
     \end{column}
-    \begin{column}{0.46\textwidth}
+    \begin{column}{0.44\textwidth}
       \begin{itemize}\setlength{\itemsep}{3pt}
-        \item \textbf{The network amplifies the width difference.} At the input the change is 5\%. By blocks 4--6 the $\nu$-token features move by 25--33\%, and a linear probe tells S from D almost perfectly (AUC 0.95).
-        \item \textbf{A sim-trained linear head transfers worse in deeper layers:} AUC loss S$\to$D grows from 0.03 (block 2) to 0.08--0.10 (blocks 5--12).
-        \item \textbf{For category 3:} freezing only the embeddings and the first few blocks keeps most of the cue in the trainable part. The D-backbone probe (queued) will show whether pretraining in D reduces it.
+        \item \textbf{S backbone:} the network amplifies the 5\% input width change to 25--33\% by blocks 4--6. A sim-trained linear $\nu$/cosmic head loses 0.08--0.10 AUC on D.
+        \item \textbf{D backbone: width is still encoded} (S-vs-D AUC 0.94, same as S). Freezing does not remove the information.
+        \item \textbf{But its $\nu$/cosmic features transfer:} a linear head trained on S keeps AUC \good{0.97} on D (vs 0.89 for the S backbone), with equal performance on S.
+        \item \textbf{So pretraining in D makes the task-relevant directions sim/data-consistent}, the behaviour the FM paradigm hopes for. The D fine-tunes (C2/C3) test whether this survives fine-tuning.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -252,8 +253,8 @@
       \vspace{6pt}
       \raggedright
       \begin{itemize}
-        \item \textbf{C1} pretraining in D: \que{} (debug job 7865226, 2 nodes, $\approx$1 h).
-        \item \textbf{C2/C3 from D} (15 runs) and their tests: prod job 7865266 (10 nodes, LArTPC\_FM), starts after C1; $\approx$1.5 h.
+        \item \textbf{C1} pretraining in D: \done{} (34k steps; val loss 0.771 vs 0.744 for S).
+        \item \textbf{C2/C3 from D:} 6/15 done; rest on 2-node preemptable jobs; tests in D follow.
         \item \textbf{C5} invariance methods: \prop{}, only if needed.
         \item \textbf{Joshua's C2} (real$\to$sim, CL and C+XF, width + light): \plan{} (round 3).
       \end{itemize}
@@ -333,7 +334,8 @@
     \end{column}
     \begin{column}{0.42\textwidth}
       \begin{itemize}\setlength{\itemsep}{4pt}
-        \item \textbf{Control arm: not successful so far.} With $\approx$87 WC-$\nu$ events per training fold, the model learns which events have no $\nu$ hits (high hit AUC), but not which hits WC calls $\nu$ inside $\nu$ events. It is worse than the sim-trained model on T2.
+        \item \textbf{Why the metrics disagree.} Hit AUC ranks all hits of all 210 test events, $\approx$95\% of them in events with no WC $\nu$: it rewards knowing which \emph{events} are cosmic-only. F1 inside WC-$\nu$ events asks which \emph{hits} in a $\nu$ event are WC's $\nu$ hits. At 0.5 it also depends on calibration: trained with $\approx$1\% positive hits, the model stays below 0.5.
+        \item \textbf{Control arm: not successful so far.} With $\approx$87 WC-$\nu$ training events it learns the easy part (cosmic-only events) but not the hard part (hits inside $\nu$ events), and is worse on T2.
         \item \textbf{D arm} (D-pretrained M CL): queued with the D fine-tunes. If it also falls short, more WC-labelled real data (D6, needs round 2) is the next lever; D6 is on hold until then.
       \end{itemize}
     \end{column}
@@ -409,7 +411,7 @@
   \begin{enumerate}\setlength{\itemsep}{4pt}
     \item \textbf{Measure the problem: clear.} Hit width is the dominant data/sim mismatch; charge and light corrections are small for T1/T2. qlfm-M CL is the most width-sensitive ($-0.29$ T1 with 3D factors). The network amplifies the width difference to nearly perfect S/D separability by mid-depth.
     \item \textbf{Labels in the data-like domain: clear.} With labelled data-like events, the simulation score comes back (0.911 vs 0.919). That is an upper bound, not a recipe for real data. On real data, 2D data-like training recovered only part of the gap.
-    \item \textbf{FM paradigm: not clear yet.} From the S backbone, every form of freezing transfers \emph{worse} to D than full fine-tuning (frozen 0.485, full 0.631, upper bound 0.911): the S features carry the width cue. The key runs from a D backbone are queued (prod job 7864124). \textit{Haiwang to summarise once they finish.}
+    \item \textbf{FM paradigm: not clear yet, but a first positive sign.} From the S backbone, every form of freezing transfers \emph{worse} to D than full fine-tuning (frozen 0.485, full 0.631, upper bound 0.911). The D backbone still encodes width, but a sim-trained linear head on it transfers to D with AUC 0.97 (vs 0.89 for S). D fine-tunes: 6/15 done, tests pending. \textit{Haiwang to summarise once they finish.}
     \item \textbf{Real-data validation: clear for now.} Overlay results overstate real-data performance; Wire-Cell wins on beam-on. The D test ranks methods the same way as real data, but recovering in D (0.911) brings only 0.34 on real data: the modelled width shift is a partial proxy, and other sim/data differences remain. Small statistics (70 selected events).
     \item \textbf{SBND: clear.} SBND pretraining gives the best model (T1 0.921, 3 seeds) ahead of MicroBooNE transfer (0.903) and scratch (0.804), and nearly matches Wire-Cell (0.931) at 1\% labels. Light in pretraining beats light at the head here too. Open: the data/sim question for SBND.
     \item \textbf{Paper fairness: not clear.} The width-fair comparison (F1) has not been run, and the ME1 headline depends on categories 3--4. \textit{Haiwang to summarise.}
