@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 13:07 UTC}
+\newcommand{\updated}{2026-11-20 13:14 UTC}
 
 \title{qlfm experiments: live status}
 \subtitle{Planned, running and finished tests, with results and takeaways}
@@ -340,6 +340,30 @@
       \end{itemize}
     \end{column}
   \end{columns}
+\end{frame}
+
+%=====================================================================
+\begin{frame}{4c. D5: what the metrics measure, and why they move in opposite directions}
+  \footnotesize
+  \centering
+  \scriptsize
+  \fitw{\begin{tabular}{p{4.2cm}p{7.6cm}cc}
+    \toprule
+    metric & what it measures & real-data fine-tune & sim-trained \\
+    \midrule
+    \textbf{hit AUC, all test events} & Ranks every hit of all 210 test events; $\approx$95\% of them are in events with no WC $\nu$. Mainly rewards knowing which \emph{events} are cosmic-only. & \good{0.91} & 0.70 \\
+    \textbf{hit F1 @ 0.5, inside WC-$\nu$ events} & Within the $\approx$10 events WC calls $\nu$: do the model's $\nu$ hits (probability $>$ 0.5) match WC's? Discrimination \emph{and} calibration. & \bad{0.07} & 0.25 \\
+    \textbf{hit F1, best threshold, inside WC-$\nu$ events} & Same, threshold tuned on the test fold (optimistic): within-event discrimination only. & 0.30 & 0.35 \\
+    \textbf{T2 AUC} & Does the event-level $\nu$ score rank events like WC's generic-$\nu$ decision? & 0.66 & 0.71 \\
+    \bottomrule
+  \end{tabular}}
+  \vspace{8pt}
+  \raggedright\footnotesize
+  \begin{enumerate}\setlength{\itemsep}{3pt}
+    \item \textbf{The easy part improves.} Trained on real events, the model learns what real cosmic-only events look like and scores all their hits low. Most test hits are in such events, so the all-events AUC jumps (0.70 $\to$ 0.91).
+    \item \textbf{The hard part does not.} $\approx$87 WC-$\nu$ training events per fold are not enough to learn which hits \emph{inside} a $\nu$ event WC assigns to the $\nu$ (0.30 vs 0.35), or which events WC selects (T2 0.66 vs 0.71).
+    \item \textbf{The 0.5 cut adds a calibration effect.} With $\approx$1\% positive hits in training, the real-data model's probabilities stay mostly below 0.5, so it tags almost nothing (0.07). The sim-trained model saw more $\nu$ hits and is more confident (0.25).
+  \end{enumerate}
 \end{frame}
 
 %=====================================================================
