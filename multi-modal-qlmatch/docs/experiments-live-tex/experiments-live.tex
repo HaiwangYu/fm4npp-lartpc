@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 15:14 UTC}
+\newcommand{\updated}{2026-11-20 18:27 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
 \newcommand{\PDfbReal}{\good{0.25}}
 \newcommand{\PDlpReal}{0.12}
@@ -117,8 +117,8 @@
     D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side after C2 & $\approx$3 h \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
-    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (negative so far); D arm \run{} (7868644, 7868754) & $\approx$2 h after start \\
-    D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & \done{} (both arms, 10 folds): not successful & -- \\
+    D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & on hold (D5 not successful) & -- \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
     E2 & 5. SBND & full sample: pretrain M CL / M C, 13 fine-tunes & H & \done{} (13/13) & -- \\
@@ -304,7 +304,7 @@
         \item \textbf{D2, S side done:} same ranking as the D test, but the labels-in-D model (0.911 in D) reaches only 0.34 here: \textbf{modelled width explains only part of the real gap.}
         \item \textbf{D3:} round 2 (more beam-on/EXT), awaiting approval; today 70 WC-selected beam-on events.
         \item \textbf{D4:} real-data pretraining, later.
-        \item \textbf{D5:} fine-tune on WC-labelled real data; control arm done (next page), D arm queued.
+        \item \textbf{D5, done:} fine-tuning on $\approx$1,900 WC-labelled real events does not beat the sim-trained model (next pages).
         \item \textbf{D6:} if D5 works: more WC-labelled data, scaling curve.
       \end{itemize}
     \end{column}
@@ -312,23 +312,24 @@
 \end{frame}
 
 %=====================================================================
-\begin{frame}{4b. D5: fine-tune on real data with Wire-Cell labels (control arm)}
+\begin{frame}{4b. D5: fine-tune on real data with Wire-Cell labels}
   \footnotesize
   \begin{columns}[T]
     \begin{column}{0.56\textwidth}
       \centering
       \scriptsize
-      S-pretrained qlfm-M CL, full fine-tune on WC labels (T1 = WC $\nu$ hits, T2 = WC generic $\nu$), 2,000 steps; held-out folds (8 of 10 so far), mean $\pm$ SD\\[2pt]
-      \fitw{\begin{tabular}{lcc}
+      qlfm-M CL, full fine-tune on WC labels (T1 = WC $\nu$ hits, T2 = WC generic $\nu$), 2,000 steps; all 10 held-out folds, mean $\pm$ SD\\[2pt]
+      \fitw{\begin{tabular}{lccc}
         \toprule
-        alignment with Wire-Cell on held-out real events & \textbf{real-data fine-tune} & sim-trained (no real data) \\
+        alignment with Wire-Cell & \multicolumn{2}{c}{\textbf{real-data fine-tune}} & sim-trained \\
+        on held-out real events & D-pretrained & S-pretrained & (no real data) \\
         \midrule
-        hit AUC, all test events                          & \good{0.91} $\pm$ 0.03 & 0.70 $\pm$ 0.10 \\
-        hit F1 @ 0.5, inside WC-$\nu$ events              & \bad{0.07} $\pm$ 0.08 & 0.25 $\pm$ 0.09 \\
-        hit F1, best threshold, inside WC-$\nu$ events    & 0.30 $\pm$ 0.08 & 0.35 $\pm$ 0.08 \\
-        T2 AUC vs WC generic $\nu$                        & 0.66 $\pm$ 0.11 & 0.71 $\pm$ 0.04 \\
+        hit AUC, all test events                       & 0.89 $\pm$ 0.05 & \good{0.92} $\pm$ 0.03 & 0.72 $\pm$ 0.09 \\
+        hit F1 @ 0.5, inside WC-$\nu$ events           & \bad{0.07} $\pm$ 0.08 & \bad{0.08} $\pm$ 0.09 & \good{0.25} $\pm$ 0.08 \\
+        hit F1, best threshold, inside WC-$\nu$ events & 0.36 $\pm$ 0.09 & 0.32 $\pm$ 0.08 & 0.35 $\pm$ 0.08 \\
+        T2 AUC vs WC generic $\nu$                     & 0.64 $\pm$ 0.09 & 0.68 $\pm$ 0.12 & 0.69 $\pm$ 0.06 \\
         \midrule
-        Pandora $\nu$-slice hits, F1 (all events)         & \multicolumn{2}{c}{0.04} \\
+        Pandora $\nu$-slice hits, F1 (all events)      & \multicolumn{3}{c}{0.04} \\
         \bottomrule
       \end{tabular}}\\[2pt]
       {\tiny Data: 2,097 beam-on/EXT events with WC output, 98 WC $\nu$; 10 folds stratified by the WC decision, each 90\% train ($\approx$1,890 events, 87--88 WC $\nu$) / 10\% test (210, 9--10 WC $\nu$). \code{train\_multitask --labels wc}. ``Best threshold'' is chosen on the test fold (optimistic).}
@@ -336,8 +337,8 @@
     \begin{column}{0.42\textwidth}
       \begin{itemize}\setlength{\itemsep}{4pt}
         \item \textbf{Why the metrics disagree.} Hit AUC ranks all hits of all 210 test events, $\approx$95\% of them in events with no WC $\nu$: it rewards knowing which \emph{events} are cosmic-only. F1 inside WC-$\nu$ events asks which \emph{hits} in a $\nu$ event are WC's $\nu$ hits. At 0.5 it also depends on calibration: trained with $\approx$1\% positive hits, the model stays below 0.5.
-        \item \textbf{Control arm: not successful so far.} With $\approx$87 WC-$\nu$ training events it learns the easy part (cosmic-only events) but not the hard part (hits inside $\nu$ events), and is worse on T2.
-        \item \textbf{D arm} (D-pretrained M CL): queued with the D fine-tunes. If it also falls short, more WC-labelled real data (D6, needs round 2) is the next lever; D6 is on hold until then.
+        \item \textbf{D5 not successful, with either backbone.} With $\approx$87 WC-$\nu$ training events the model learns the easy part (cosmic-only events) but not the hard part (hits inside $\nu$ events); T2 is no better than without real data. The D backbone does not change this.
+        \item \textbf{D6} (more WC-labelled data, scaling) is on hold, as conditioned on D5. The limit here looks like the number of labelled $\nu$ events.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -350,20 +351,20 @@
   \scriptsize
   \fitw{\begin{tabular}{p{4.2cm}p{7.6cm}cc}
     \toprule
-    metric & what it measures & real-data fine-tune & sim-trained \\
+    metric & what it measures & real-data fine-tune (S-pretrained, 10 folds) & sim-trained \\
     \midrule
-    \textbf{hit AUC, all test events} & Ranks every hit of all 210 test events; $\approx$95\% of them are in events with no WC $\nu$. Mainly rewards knowing which \emph{events} are cosmic-only. & \good{0.91} & 0.70 \\
-    \textbf{hit F1 @ 0.5, inside WC-$\nu$ events} & Within the $\approx$10 events WC calls $\nu$: do the model's $\nu$ hits (probability $>$ 0.5) match WC's? Discrimination \emph{and} calibration. & \bad{0.07} & 0.25 \\
-    \textbf{hit F1, best threshold, inside WC-$\nu$ events} & Same, threshold tuned on the test fold (optimistic): within-event discrimination only. & 0.30 & 0.35 \\
-    \textbf{T2 AUC} & Does the event-level $\nu$ score rank events like WC's generic-$\nu$ decision? & 0.66 & 0.71 \\
+    \textbf{hit AUC, all test events} & Ranks every hit of all 210 test events; $\approx$95\% of them are in events with no WC $\nu$. Mainly rewards knowing which \emph{events} are cosmic-only. & \good{0.92} & 0.72 \\
+    \textbf{hit F1 @ 0.5, inside WC-$\nu$ events} & Within the $\approx$10 events WC calls $\nu$: do the model's $\nu$ hits (probability $>$ 0.5) match WC's? Discrimination \emph{and} calibration. & \bad{0.08} & 0.25 \\
+    \textbf{hit F1, best threshold, inside WC-$\nu$ events} & Same, threshold tuned on the test fold (optimistic): within-event discrimination only. & 0.32 & 0.35 \\
+    \textbf{T2 AUC} & Does the event-level $\nu$ score rank events like WC's generic-$\nu$ decision? & 0.68 & 0.69 \\
     \bottomrule
   \end{tabular}}
   \vspace{8pt}
   \raggedright\footnotesize
   \begin{enumerate}\setlength{\itemsep}{3pt}
-    \item \textbf{The easy part improves.} Trained on real events, the model learns what real cosmic-only events look like and scores all their hits low. Most test hits are in such events, so the all-events AUC jumps (0.70 $\to$ 0.91).
-    \item \textbf{The hard part does not.} $\approx$87 WC-$\nu$ training events per fold are not enough to learn which hits \emph{inside} a $\nu$ event WC assigns to the $\nu$ (0.30 vs 0.35), or which events WC selects (T2 0.66 vs 0.71).
-    \item \textbf{The 0.5 cut adds a calibration effect.} With $\approx$1\% positive hits in training, the real-data model's probabilities stay mostly below 0.5, so it tags almost nothing (0.07). The sim-trained model saw more $\nu$ hits and is more confident (0.25).
+    \item \textbf{The easy part improves.} Trained on real events, the model learns what real cosmic-only events look like and scores all their hits low. Most test hits are in such events, so the all-events AUC jumps (0.72 $\to$ 0.92).
+    \item \textbf{The hard part does not.} $\approx$87 WC-$\nu$ training events per fold are not enough to learn which hits \emph{inside} a $\nu$ event WC assigns to the $\nu$ (0.32 vs 0.35), or which events WC selects (T2 0.68 vs 0.69).
+    \item \textbf{The 0.5 cut adds a calibration effect.} With $\approx$1\% positive hits in training, the real-data model's probabilities stay mostly below 0.5, so it tags almost nothing (0.08). The sim-trained model saw more $\nu$ hits and is more confident (0.25).
   \end{enumerate}
 \end{frame}
 
@@ -437,7 +438,7 @@
     \item \textbf{Measure the problem: clear.} Hit width is the dominant data/sim mismatch; charge and light corrections are small for T1/T2. qlfm-M CL is the most width-sensitive ($-0.29$ T1 with 3D factors). The network amplifies the width difference to nearly perfect S/D separability by mid-depth.
     \item \textbf{Labels in the data-like domain: clear.} With labelled data-like events, the simulation score comes back (0.911 vs 0.919). That is an upper bound, not a recipe for real data. On real data, 2D data-like training recovered only part of the gap.
     \item \textbf{FM paradigm: first positive result in D, weaker on real data.} From the S backbone every freezing mode transfers worse to D. From the D backbone, \emph{partial} freezing transfers best: 6 blocks frozen 0.762 in D (47\% of the gap, sim labels only), while full fine-tuning gives back most of the gain (0.651 vs 0.631). On real beam-on the gain is smaller (0.25 vs 0.20). \textit{Haiwang to summarise once all seeds finish.}
-    \item \textbf{Real-data validation: clear for now.} Overlay results overstate real-data performance; Wire-Cell wins on beam-on. The D test ranks methods the same way as real data, but recovering in D (0.911) brings only 0.34 on real data: the modelled width shift is a partial proxy, and other sim/data differences remain. Small statistics (70 selected events).
+    \item \textbf{Real-data validation: clear for now.} Overlay results overstate real-data performance; Wire-Cell wins on beam-on. The D test ranks methods the same way as real data, but recovering in D (0.911) brings only 0.34 on real data: the modelled width shift is a partial proxy. Fine-tuning on $\approx$1,900 WC-labelled real events (D5) does not help yet: too few $\nu$ events (98).
     \item \textbf{SBND: clear.} SBND pretraining gives the best model (T1 0.921, 3 seeds) ahead of MicroBooNE transfer (0.903) and scratch (0.804), and nearly matches Wire-Cell (0.931) at 1\% labels. Light in pretraining beats light at the head here too. Open: the data/sim question for SBND.
     \item \textbf{Paper fairness: not clear.} The width-fair comparison (F1) has not been run, and the ME1 headline depends on categories 3--4. \textit{Haiwang to summarise.}
   \end{enumerate}
