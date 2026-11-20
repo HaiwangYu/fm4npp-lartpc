@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 03:11 UTC}
+\newcommand{\updated}{2026-11-20 09:45 UTC}
 
 \title{qlfm experiments: live status}
 \subtitle{Planned, running and finished tests, with results and takeaways}
@@ -113,7 +113,7 @@
     D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side \que{} (7865266) & D: with C2 \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
-    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control \que{} (7865631); D arm \que{} (7865266) & S: $\approx$1 h after start; D: with C2 \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control 8/10 \done{} (2 requeued); D arm \que{} (7865266/7867974) & D: with C2 \\
     D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
@@ -302,8 +302,39 @@
         \item \textbf{D2, S side done:} same ranking as the D test, but the labels-in-D model (0.911 in D) reaches only 0.34 here: \textbf{modelled width explains only part of the real gap.}
         \item \textbf{D3:} round 2 (more beam-on/EXT), awaiting approval; today 70 WC-selected beam-on events.
         \item \textbf{D4:} real-data pretraining, later.
-        \item \textbf{D5, queued:} fine-tune on real beam-on/EXT with WC labels (2,097 events, 98 WC $\nu$; 10 folds of 90/10). D-pretrained M CL, S-pretrained control. Metric: alignment with WC on the test fold.
+        \item \textbf{D5:} fine-tune on WC-labelled real data; control arm done (next page), D arm queued.
         \item \textbf{D6:} if D5 works: more WC-labelled data, scaling curve.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%=====================================================================
+\begin{frame}{4b. D5: fine-tune on real data with Wire-Cell labels (control arm)}
+  \footnotesize
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \centering
+      \scriptsize
+      S-pretrained qlfm-M CL, full fine-tune on WC labels (T1 = WC $\nu$ hits, T2 = WC generic $\nu$), 2,000 steps; held-out folds (8 of 10 so far), mean $\pm$ SD\\[2pt]
+      \fitw{\begin{tabular}{lcc}
+        \toprule
+        alignment with Wire-Cell on held-out real events & \textbf{real-data fine-tune} & sim-trained (no real data) \\
+        \midrule
+        hit AUC, all test events                          & \good{0.91} $\pm$ 0.03 & 0.70 $\pm$ 0.10 \\
+        hit F1 @ 0.5, inside WC-$\nu$ events              & \bad{0.07} $\pm$ 0.08 & 0.25 $\pm$ 0.09 \\
+        hit F1, best threshold, inside WC-$\nu$ events    & 0.30 $\pm$ 0.08 & 0.35 $\pm$ 0.08 \\
+        T2 AUC vs WC generic $\nu$                        & 0.66 $\pm$ 0.11 & 0.71 $\pm$ 0.04 \\
+        \midrule
+        Pandora $\nu$-slice hits, F1 (all events)         & \multicolumn{2}{c}{0.04} \\
+        \bottomrule
+      \end{tabular}}\\[2pt]
+      {\tiny Data: 2,097 beam-on/EXT events with WC output, 98 WC $\nu$; 10 folds stratified by the WC decision, each 90\% train ($\approx$1,890 events, 87--88 WC $\nu$) / 10\% test (210, 9--10 WC $\nu$). \code{train\_multitask --labels wc}. ``Best threshold'' is chosen on the test fold (optimistic).}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{itemize}\setlength{\itemsep}{4pt}
+        \item \textbf{Control arm: not successful so far.} With $\approx$87 WC-$\nu$ events per training fold, the model learns which events have no $\nu$ hits (high hit AUC), but not which hits WC calls $\nu$ inside $\nu$ events. It is worse than the sim-trained model on T2.
+        \item \textbf{D arm} (D-pretrained M CL): queued with the D fine-tunes. If it also falls short, more WC-labelled real data (D6, needs round 2) is the next lever; D6 is on hold until then.
       \end{itemize}
     \end{column}
   \end{columns}
