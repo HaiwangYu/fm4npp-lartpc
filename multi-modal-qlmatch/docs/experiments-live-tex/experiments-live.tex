@@ -23,11 +23,11 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 13:19 UTC}
+\newcommand{\updated}{2026-11-20 13:33 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
-\newcommand{\PDfbReal}{\que}
-\newcommand{\PDlpReal}{\que}
-\newcommand{\PDfrReal}{\que}
+\newcommand{\PDfbReal}{\good{0.25}}
+\newcommand{\PDlpReal}{0.12}
+\newcommand{\PDfrReal}{0.19}
 
 \title{qlfm experiments: live status}
 \subtitle{Planned, running and finished tests, with results and takeaways}
@@ -262,11 +262,11 @@
     \end{column}
     \begin{column}{0.42\textwidth}
       \begin{itemize}\setlength{\itemsep}{3pt}
-        \item \textbf{Pretraining in D helps in D, for every freezing mode:} frozen $+0.19$, 6 blocks frozen $+0.18$, head-first $+0.06$ in T1; T2 in D up to 0.98--0.99.
-        \item \textbf{Best so far: D backbone, first 6 blocks frozen: T1 0.762 in D}, recovering 47\% of the gap from the naive full fine-tune to the upper bound, without any labelled data-like event.
-        \item \textbf{Head-first fine-tuning gains least:} once the whole network is unfrozen, the sim labels re-teach the shortcut.
-        \item In S the D backbone is slightly lower (expected: its features were learned in D).
-        \item \textbf{Pending:} D backbone with full fine-tune, the D upper bound (B3), seed 2, and the real-data check of these runs.
+        \item \textbf{Pretraining in D helps in D for every mode:} T1 $+0.19$ frozen, $+0.18$ 6 blocks frozen, $+0.06$ head-first; T2 in D 0.95--0.99.
+        \item \textbf{Best: D backbone, 6 blocks frozen: T1 0.762 in D}, 47\% of the naive-to-upper-bound gap, with sim labels only.
+        \item \textbf{Head-first gains least:} unfreezing everything lets the sim labels re-teach the shortcut.
+        \item \textbf{Real beam-on improves less:} best 0.25 vs 0.20 naive (0.34 S upper bound, $\approx$0.6 width-free); beam-on pass rate drops. D is only part of the real shift.
+        \item \textbf{Pending:} D full fine-tune, D upper bound (B3), seed 2.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -435,7 +435,7 @@
   \begin{enumerate}\setlength{\itemsep}{4pt}
     \item \textbf{Measure the problem: clear.} Hit width is the dominant data/sim mismatch; charge and light corrections are small for T1/T2. qlfm-M CL is the most width-sensitive ($-0.29$ T1 with 3D factors). The network amplifies the width difference to nearly perfect S/D separability by mid-depth.
     \item \textbf{Labels in the data-like domain: clear.} With labelled data-like events, the simulation score comes back (0.911 vs 0.919). That is an upper bound, not a recipe for real data. On real data, 2D data-like training recovered only part of the gap.
-    \item \textbf{FM paradigm: first positive result, not final.} From the S backbone every freezing mode transfers \emph{worse} to D than full fine-tuning. \textbf{From the D backbone every mode transfers better}; the best, D backbone with the first 6 blocks frozen, reaches T1 0.762 in D (naive 0.631, upper bound 0.911: 47\% of the gap) with sim labels only. The probe agrees (sim-trained head on D features: AUC 0.97 vs 0.89). Pending: full fine-tune and upper bound from D, seed 2, real-data check. \textit{Haiwang to summarise once they finish.}
+    \item \textbf{FM paradigm: first positive result in D, weaker on real data.} From the S backbone every freezing mode transfers worse to D; from the D backbone every mode transfers better. Best: D backbone, 6 blocks frozen, T1 0.762 in D (47\% of the gap, sim labels only). On real beam-on the gain is smaller (0.25 vs 0.20). Pending: D full fine-tune and upper bound. \textit{Haiwang to summarise once they finish.}
     \item \textbf{Real-data validation: clear for now.} Overlay results overstate real-data performance; Wire-Cell wins on beam-on. The D test ranks methods the same way as real data, but recovering in D (0.911) brings only 0.34 on real data: the modelled width shift is a partial proxy, and other sim/data differences remain. Small statistics (70 selected events).
     \item \textbf{SBND: clear.} SBND pretraining gives the best model (T1 0.921, 3 seeds) ahead of MicroBooNE transfer (0.903) and scratch (0.804), and nearly matches Wire-Cell (0.931) at 1\% labels. Light in pretraining beats light at the head here too. Open: the data/sim question for SBND.
     \item \textbf{Paper fairness: not clear.} The width-fair comparison (F1) has not been run, and the ME1 headline depends on categories 3--4. \textit{Haiwang to summarise.}
