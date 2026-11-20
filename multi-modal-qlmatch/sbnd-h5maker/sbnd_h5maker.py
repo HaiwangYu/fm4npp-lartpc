@@ -9,6 +9,11 @@ A UNIT_DIR is an aurora-r2 production unit (sbnd-wirecell-production): `reco1_fi
 files, and `pr/all/pr_evt<run>_<subrun>_<event>/tracking-pr.root` holds the Wire-Cell output per event.
 `--reco1 F [F ...] --wc-dir D` is the same without a unit directory.
 
+Real data (0.5): `--data` reads no truth product. event_table keeps its truth columns at their defaults
+(nu_index -1, nu_pdg 0, nu_vtx -9999, ...); nu_table, edep_table, edep_cosmic_table and particle_table are
+written with zero rows. The reco1 input should be the FrameShift output (sbnd::timing::FrameShiftInfo
+"frameshift"), whose values go to event_table.frame_*_ns.
+
 Tables (hep_hpc / ph5concat layout: one (N, k) dataset per column, `event_id` (N, 3) and
 `event_id.seq_cnt` = [event sequence number, row count] for each event with rows):
   event_table         nu truth (as HDF5Maker EventInfo "nu") + n_nu, nu_mode, beam gate, wc_status, file_index
@@ -39,8 +44,21 @@ UNITS = {
     "hit local_time, rms": "TPC ticks of 0.5 us from the readout start (trigger at tick 410)",
     "ophit peaktime, width, opflash time, time_width": "us, trigger clock (OpHit::PeakTime); peaktime_abs is OpHit::PeakTimeAbs",
     "integral": "ADC x tick", "pe, sumpe, totalpe": "photoelectrons",
-    "wc reco_enu": "MeV", "wc flash_time_us": "us"}
-VERSION = "sbnd-h5maker 0.4"
+    "wc reco_enu": "MeV", "wc flash_time_us": "us",
+    "event_table time_s": "s, unix time of the event (EventAuxiliary)",
+    "event_table frame_*_ns": "ns, sbnd::timing::FrameShiftInfo (real data; 0 with has_frameshift 0)"}
+VERSION = "sbnd-h5maker 0.5"
+
+
+WC_LABEL_NOTES = (
+    "Wire-Cell nu candidates (T_tagger rows, aurora-r2 / SBND pr() defaults): one per in-beam-window flash bundle "
+    "(matched flash time in [0.2, 2.2) us, nu_per_bundle, length floor 15 cm). Mains already tagged cosmic upstream "
+    "(TGM, STM or Q/L lm_flag > 0) are skipped, and the veto covers the whole flash bundle (nu_skip_cosmic + "
+    "nu_skip_cosmic_bundle; untagged mains >= 15 cm survive), so the wc_* hit labels are charge-light matching AFTER "
+    "the TGM/STM/light-mismatch veto. event_table.wc_n_bundle_cosmic counts in-window bundles dropped by that veto "
+    "(T_bundle reason 2). The PR-level cosmic tagger is NOT applied: its verdict is wc_event_table.cosmict_flag "
+    "(OR of its ten tests); cosmic_flag is only its flag-9 BDT input (1 = not fired or not evaluated). "
+    "Further cuts (cosmict_flag, numu/nue scores, match_isFC) are for the user.")
 
 
 # ----------------------------------------------------------------------------------------------- output
@@ -88,13 +106,21 @@ def f32(k=1):
     return (np.float32, k)
 
 
+def f64(k=1):
+    return (np.float64, k)
+
+
 def schema():
     T = {}
     T["event_table"] = Table("event_table", {
         "is_cc": i32(), "nu_pdg": i32(), "nu_energy": f32(), "lep_energy": f32(), "nu_dir": f32(3), "nu_vtx": f32(3),
         "nu_time_ns": f32(), "lep_pdg": i32(), "nu_mode": i32(), "nu_int_type": i32(), "n_nu": i32(),
         "nu_index": i32(), "beam_gate_start_ns": f32(), "beam_gate_width_ns": f32(), "wc_status": i32(),
-        "file_index": i32(), "n_mcp_no_truth": i32()})
+        "file_index": i32(), "n_mcp_no_truth": i32(),
+        # 0.5: event time + FrameShiftInfo (real data), Wire-Cell in-beam bundle census (T_bundle)
+        "time_s": f64(), "has_frameshift": i32(), "timing_type": i32(), "frame_apply_at_caf_ns": f32(),
+        "frame_hlt_beamgate_ns": f32(), "frame_hlt_crtt1_ns": f32(), "frame_tdc_crtt1_ns": f32(),
+        "frame_tdc_bes_ns": f32(), "frame_tdc_rwm_ns": f32(), "wc_n_bundle": i32(), "wc_n_bundle_cosmic": i32()})
     T["nu_table"] = Table("nu_table", {
         "nu_index": i32(), "nu_pdg": i32(), "is_cc": i32(), "nu_energy": f32(), "lep_energy": f32(),
         "lep_pdg": i32(), "nu_vtx": f32(3), "nu_dir": f32(3), "nu_time_ns": f32(), "nu_mode": i32(),
@@ -123,7 +149,10 @@ def schema():
         "nu_index": i32(), "cluster_id": i32(), "has_vertex": i32(), "neutrino_type": i32(), "reco_vtx": f32(3),
         "reco_enu": f32(), "flash_time_us": f32(), "flash_pe": f32(), "flash_tpc": i32(), "match_isFC": f32(),
         "cosmic_flag": f32(), "numu_score": f32(), "nue_score": f32(), "cosmict_score": f32(),
-        "n_clusters_in_pr": i32()})
+        "n_clusters_in_pr": i32(),
+        # 0.5: cosmict_flag = the cosmic tagger's verdict (OR of its ten tests); cosmic_flag above is only the
+        # flag-9 BDT input (1 = not fired or never evaluated), see wc_label_notes
+        "cosmict_flag": f32(), "matched_flash_gid": i32()})
     T["wc_hit_table"] = Table("wc_hit_table", {
         "hit_id": i32(), "wc_cluster_id": i32(), "wc_nu_index": i32(), "wc_main": i32(), "wc_in_enu": i32()})
     return T
@@ -173,6 +202,7 @@ class WC:
     def event(self, rse):
         """(status, candidate rows, footprint) ; status 1 = tracking-pr.root present, 0 = missing."""
         p = self.path(rse)
+        self.census = (-1, -1)
         if p is None:
             return 0, [], None
         f = self.uproot.open(p)
@@ -182,7 +212,8 @@ class WC:
             tg = f["T_tagger"].arrays(["nu_index", "cluster_id", "has_vertex", "neutrino_type", "nu_x", "nu_y", "nu_z",
                                        "flash_time_us", "flash_pe", "flash_tpc", "match_isFC", "cosmic_flag",
                                        "numu_score", "nue_score", "cosmict_score", "act_cluster_id", "act_in_pr",
-                                       "act_in_enu"], library="ak")
+                                       "act_in_enu"] + [b for b in ("cosmict_flag", "matched_flash_gid")
+                                                        if b in f["T_tagger"].keys()], library="ak")
             import awkward as ak
             tg = {k: (ak.to_list(tg[k]) if k.startswith("act_") else ak.to_numpy(tg[k])) for k in tg.fields}
             enu = {}
@@ -204,7 +235,9 @@ class WC:
                     flash_pe=float(tg["flash_pe"][i]), flash_tpc=int(tg["flash_tpc"][i]),
                     match_isFC=float(tg["match_isFC"][i]), cosmic_flag=float(tg["cosmic_flag"][i]),
                     numu_score=float(tg["numu_score"][i]), nue_score=float(tg["nue_score"][i]),
-                    cosmict_score=float(tg["cosmict_score"][i]), n_clusters_in_pr=int(np.sum(inpr))))
+                    cosmict_score=float(tg["cosmict_score"][i]), n_clusters_in_pr=int(np.sum(inpr)),
+                    cosmict_flag=float(tg["cosmict_flag"][i]) if "cosmict_flag" in tg else -1.0,
+                    matched_flash_gid=int(tg["matched_flash_gid"][i]) if "matched_flash_gid" in tg else -1))
         fp = None
         if "T_proj_data" in keys and f["T_proj_data"].num_entries:
             import awkward as ak
@@ -217,6 +250,10 @@ class WC:
             if len(ch):
                 assert len(ch) == len(sl) == len(cl)
                 fp = (ch, sl, cl, role)
+        self.census = (-1, -1)
+        if "T_bundle" in keys:
+            r = f["T_bundle"].arrays(["reason"], library="np")["reason"]
+            self.census = (int(len(r)), int(np.sum(r == 2)))   # NuBundleCensus kAllCosmic = 2
         return 1, cands, fp
 
     def hit_labels(self, fp, channel, tick, off=None):
@@ -294,7 +331,7 @@ def make_geo(ROOT, det, a):
         G.av[i] = v
     G.window = a.proj_window
     G.pad = a.proj_pad
-    if a.sce_map and not ROOT.sbndh5.load_sce(G, a.sce_map):
+    if a.sce_map and not a.data and not ROOT.sbndh5.load_sce(G, a.sce_map):   # data: no projection
         sys.exit("cannot load SCE map " + a.sce_map)
     return G
 
@@ -336,7 +373,13 @@ def main():
                     help="keep ophits with peaktime in [lo, hi] us ('all' = every ophit); SBND PMT readout spans +-1.5 ms")
     ap.add_argument("--scan-proj", type=int, default=0, help="on the first N events, print hits with deposits vs offset")
     ap.add_argument("--detector-json", default=os.path.join(HERE, "sbnd_detector.json"))
+    ap.add_argument("--data", action="store_true",
+                    help="real data: read no truth product (truth tables empty, event_table truth columns at defaults)")
+    ap.add_argument("--frameshift-label", default="frameshift",
+                    help="art label of sbnd::timing::FrameShiftInfo ('' = do not read)")
     a = ap.parse_args()
+    if a.data and (a.scan_tdc or a.scan_proj):
+        sys.exit("--scan-tdc / --scan-proj need MC truth")
 
     units = list(a.units)
     if a.units_file:
@@ -355,6 +398,7 @@ def main():
     T = schema()
     L = ROOT.sbndh5.Labels()
     L.tdc_offset = a.tdc_offset
+    L.frameshift = a.frameshift_label
     G = make_geo(ROOT, det, a)
     o = ROOT.sbndh5.Out()
     vf = ROOT.std.vector("std::string")()
@@ -396,7 +440,10 @@ def main():
                     best = sorted(zip(offs, col), key=lambda kv: -kv[1])[:5]
                     print("projection dt scan plane %d (dt: hits with deposits): %s" % (p, best), flush=True)
                 print("channel-model mismatches per plane: %s" % stats["channel_model_mismatch"], flush=True)
-        ROOT.sbndh5.fill(ev, o, L, G)
+        if a.data:
+            ROOT.sbndh5.fill_data(ev, o, L)
+        else:
+            ROOT.sbndh5.fill(ev, o, L, G)
         rse = (o.run, o.subrun, o.event)
         fidx = fname2idx.get(str(ev.getTFile().GetName()), -1)
         V = lambda v, dt: vec2np(ROOT, v, dt)
@@ -410,7 +457,12 @@ def main():
                              nu_time_ns=[o.nu_time], lep_pdg=[o.lep_pdg], nu_mode=[o.nu_mode],
                              nu_int_type=[o.nu_int_type], n_nu=[o.n_nu], nu_index=[o.nu_sel],
                              beam_gate_start_ns=[o.beam_gate_start], beam_gate_width_ns=[o.beam_gate_width],
-                             wc_status=[status], file_index=[fidx], n_mcp_no_truth=[o.n_mcp_no_truth])
+                             wc_status=[status], file_index=[fidx], n_mcp_no_truth=[o.n_mcp_no_truth],
+                             time_s=[o.time_s], has_frameshift=[o.has_frameshift], timing_type=[o.timing_type],
+                             frame_apply_at_caf_ns=[o.fs_apply_at_caf], frame_hlt_beamgate_ns=[o.fs_hlt_beamgate],
+                             frame_hlt_crtt1_ns=[o.fs_hlt_crtt1], frame_tdc_crtt1_ns=[o.fs_tdc_crtt1],
+                             frame_tdc_bes_ns=[o.fs_tdc_bes], frame_tdc_rwm_ns=[o.fs_tdc_rwm],
+                             wc_n_bundle=[wc.census[0]], wc_n_bundle_cosmic=[wc.census[1]])
         nnu = o.v_index.size()
         T["nu_table"].add(seq, rse, nnu, nu_index=V(o.v_index, np.int32), nu_pdg=V(o.v_pdg, np.int32),
                           is_cc=V(o.v_cc, np.int32), nu_energy=V(o.v_energy, np.float32),
@@ -498,6 +550,8 @@ def main():
     with h5py.File(tmp, "w") as f:
         rows = {name: t.write(f, a.compression) for name, t in T.items()}
         f.attrs["creator"] = VERSION
+        f.attrs["is_data"] = int(a.data)
+        f.attrs["wc_label_notes"] = WC_LABEL_NOTES
         f.attrs["reco1_files"] = json.dumps(files)
         f.attrs["wc_dirs"] = json.dumps(wcdirs)
         f.attrs["wc_tick_offset"] = a.wc_tick_offset
@@ -507,6 +561,7 @@ def main():
         f.attrs["hit_truth"] = {1: "gaushitTruthMatch assns",
                                 2: "SimChannel %s backtracking, TDC = tick + %g, window PeakTime +- %g RMS"
                                    % (L.simchannel, L.tdc_offset, L.hit_time_rms),
+                                0: "none (real data)" if a.data else "none",
                                 3: "projection of %s deposits (SCE map %s) onto (channel, tick); window PeakTime +- %g RMS"
                                    " +- %g ticks" % (L.sed, a.sce_map or "none", a.proj_window, a.proj_pad)}.get(truth_src, "none")
         f.attrs["truth_projection"] = json.dumps({"dt_ticks_UVY": [float(x) for x in a.proj_dt.replace(":", ",").split(",")],
@@ -516,13 +571,13 @@ def main():
         f.attrs["labels"] = json.dumps({"hit": str(L.hit), "hit_truth": str(L.hit_truth), "truth": str(L.truth),
                                         "mcparticle": str(L.mcparticle), "mcreco": str(L.mcreco),
                                         "ophit": str(L.ophit), "opflash": [str(x) for x in L.opflash],
-                                        "beamgate": str(L.beamgate)})
+                                        "beamgate": str(L.beamgate), "frameshift": str(L.frameshift)})
         if os.path.exists(a.detector_json):
             f.attrs["detector"] = open(a.detector_json).read()
-            if "simulation" in det:
+            if "simulation" in det and not a.data:
                 f.attrs["sim_config"] = json.dumps(det["simulation"])
         f.attrs["units"] = json.dumps(UNITS)
-        f.attrs["nu_choice"] = ("event_table neutrino = nu_table row with the largest edep_collection (deposited energy of "
+        f.attrs["nu_choice"] = "none (real data)" if a.data else ("event_table neutrino = nu_table row with the largest edep_collection (deposited energy of "
                                 "that neutrino's particles on collection-plane hits); ties go to in_av = 1, then to the "
                                 "lowest nu_index. event_table.nu_index names it (-1 = no neutrino).")
     os.replace(tmp, a.out)

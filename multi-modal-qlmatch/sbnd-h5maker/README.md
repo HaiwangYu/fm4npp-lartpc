@@ -17,6 +17,16 @@ open data (`HDF5Maker`, uboone/hdf5maker branch `opensamples`; zenodo 8370883).
 | `relabel_wc.py` | Rewrites `wc_hit_table` of an existing file from the Wire-Cell footprints (h5py + uproot, no ROOT). Used to fix 0.3 files. |
 | `pbs/run.pbs` | Aurora PBS job: one converter process over a list of aurora-r2 unit directories. |
 
+## Real data (0.5)
+
+`--data` reads no truth product: the truth tables are written with zero rows and the `event_table` truth columns stay at their defaults. Read the FrameShift copy of the reco1 file: its `sbnd::timing::FrameShiftInfo` goes to `event_table.frame_*_ns`, and light times on the beam clock are `peaktime + frame_apply_at_caf_ns / 1000`. Recipe, checks and the Aurora test: `docs/sbnd-realdata.md` (#14).
+
+```bash
+python sbnd_h5maker.py out.h5 --data --reco1 <reco1>_frameshift.root --wc-dir <tracking-pr dir>/pr/all
+```
+
+0.5 also adds to MC and data: `event_table` `time_s`, `has_frameshift`, `timing_type`, `frame_*_ns`, `wc_n_bundle`, `wc_n_bundle_cosmic`; `wc_event_table` `cosmict_flag` (the cosmic-tagger verdict; `cosmic_flag` is only its flag-9 BDT input) and `matched_flash_gid`; the attributes `is_data` and `wc_label_notes`. Existing columns are unchanged (test10, compared by value).
+
 ## Run (Aurora)
 
 ```bash

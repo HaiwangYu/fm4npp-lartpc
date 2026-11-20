@@ -27,6 +27,10 @@
 #include "lardataobj/Simulation/SimChannel.h"
 #include "lardataobj/Simulation/SimEnergyDeposit.h"
 #include "TFile.h"
+#if __has_include("sbnobj/SBND/Timing/FrameShiftInfo.hh")
+#include "sbnobj/SBND/Timing/FrameShiftInfo.hh"
+#define SBNDH5_HAVE_FRAMESHIFT 1
+#endif
 #include "TH3F.h"
 #include "nusimdata/SimulationBase/MCParticle.h"
 #include "nusimdata/SimulationBase/MCTruth.h"
@@ -53,6 +57,8 @@ struct Labels {
   // Fallback when neither the assns nor the SimChannels carry deposits (the Gen2 MC): project the Geant4
   // deposits (before SCE) through the forward SCE map and the drift onto (channel, tick); see Geo.
   std::string sed = "ionandscint:priorSCE";
+  // real data (0.5): sbnd::timing::FrameShiftInfo written by the sbndcode FrameShift producer (absent in MC)
+  std::string frameshift = "frameshift";
 };
 
 // Geometry for the deposit projection.  Six wire planes (tpc*3 + plane), each linear:
@@ -164,7 +170,32 @@ struct Out {
   long n_sed = 0;
   double sed_e_nu = 0, sed_e_nu_matched = 0;   // projected nu deposit energy (collection plane), and on hits
   long n_assns_hit_truth = -1, n_assns_mcp_truth = -1;
+  // event time (EventAuxiliary, unix s) and FrameShiftInfo [ns]; has_frameshift = 0 when the product is absent
+  double time_s = 0;
+  int has_frameshift = 0, timing_type = 99;
+  double fs_apply_at_caf = 0, fs_hlt_beamgate = 0, fs_hlt_crtt1 = 0, fs_tdc_crtt1 = 0, fs_tdc_bes = 0, fs_tdc_rwm = 0;
 };
+
+// FrameShiftInfo (real data) and the event time; MC keeps the defaults.
+inline void fill_timing(gallery::Event& ev, Out& o, const Labels& L) {
+  auto const& aux = ev.eventAuxiliary();
+  o.time_s = aux.time().timeHigh() + 1e-9 * aux.time().timeLow();
+#ifdef SBNDH5_HAVE_FRAMESHIFT
+  gallery::Handle<sbnd::timing::FrameShiftInfo> fs;
+  if (!L.frameshift.empty() && ev.getByLabel(art::InputTag(L.frameshift), fs)) {
+    o.has_frameshift = 1;
+    o.timing_type = fs->TimingType();
+    o.fs_apply_at_caf = fs->FrameApplyAtCaf();
+    o.fs_hlt_beamgate = fs->FrameHltBeamGate();
+    o.fs_hlt_crtt1 = fs->FrameHltCrtt1();
+    o.fs_tdc_crtt1 = fs->FrameTdcCrtt1();
+    o.fs_tdc_bes = fs->FrameTdcBes();
+    o.fs_tdc_rwm = fs->FrameTdcRwm();
+  }
+#endif
+}
+
+inline void fill_optical(gallery::Event& ev, Out& o, const Labels& L);
 
 struct BtPart {
   int category;
@@ -499,6 +530,11 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
     o.p_eproc.push_back(p.EndProcess());
   }
 
+  fill_timing(ev, o, L);
+  fill_optical(ev, o, L);
+}
+
+inline void fill_optical(gallery::Event& ev, Out& o, const Labels& L) {
   // ---- optical hits (PMTs)
   {
     gallery::Handle<std::vector<recob::OpHit>> oh;
@@ -540,6 +576,31 @@ inline void fill(gallery::Event& ev, Out& o, const Labels& L, const Geo& G) {
       ++fid;
     }
   }
+}
+
+// Real data (0.5): no truth products are read.  Hits, ophits, flashes, FrameShiftInfo and the event time only.
+inline void fill_data(gallery::Event& ev, Out& o, const Labels& L) {
+  o = Out();
+  auto const& aux = ev.eventAuxiliary();
+  o.run = aux.run();
+  o.subrun = aux.subRun();
+  o.event = aux.event();
+  o.nu_dir.assign(3, 0.f);
+  o.nu_vtx.assign(3, -9999.f);
+  auto hits = ev.getValidHandle<std::vector<recob::Hit>>(art::InputTag(L.hit));
+  for (auto const& h : *hits) {
+    auto const& w = h.WireID();
+    o.h_tpc.push_back(w.TPC);
+    o.h_plane.push_back(w.Plane);
+    o.h_wire.push_back(w.Wire);
+    o.h_channel.push_back(h.Channel());
+    o.h_time.push_back(h.PeakTime());
+    o.h_integral.push_back(h.Integral());
+    o.h_rms.push_back(h.RMS());
+    o.h_amp.push_back(h.PeakAmplitude());
+  }
+  fill_timing(ev, o, L);
+  fill_optical(ev, o, L);
 }
 
 // Fraction-of-hits-with-IDEs vs tdc offset, to pin the tick -> TDC convention on real events.

@@ -158,6 +158,35 @@ def main():
             if v["truth_hits"] >= 50 and v["eff"] < 0.2 and best > 0.5:
                 problems.append("WC hit labels: tpc%d plane%d efficiency %.3f vs %.3f on another plane (channel numbering?)"
                                 % (t_, p_, v["eff"], best))
+    # ---- real data (0.5): no truth, so check the labels without it
+    if int(f.attrs.get("is_data", 0)):
+        D = {}
+        for t in ("nu_table", "edep_table", "edep_cosmic_table", "particle_table"):
+            n = f[t + "/event_id"].shape[0]
+            D[t + "_rows"] = int(n)
+            if n:
+                problems.append("data: %s has %d rows (expected 0)" % (t, n))
+        hf = col(f, "event_table", "has_frameshift")
+        D["events_with_frameshift"] = int((hf == 1).sum())
+        D["frame_apply_at_caf_ns_q"] = q(col(f, "event_table", "frame_apply_at_caf_ns")[hf == 1]) if (hf == 1).any() else []
+        D["wc_status_1"] = int((col(f, "event_table", "wc_status") == 1).sum())
+        D["wc_n_bundle_cosmic_q"] = q(col(f, "event_table", "wc_n_bundle_cosmic"))
+        if f["wc_event_table/event_id"].shape[0]:
+            D["cosmict_flag"] = {str(k): int(v) for k, v in zip(*np.unique(col(f, "wc_event_table", "cosmict_flag"), return_counts=True))}
+        # charge fraction on the WC footprint per (tpc, plane) in candidate events: a numbering bug shows as one plane
+        # far below the others of the same TPC
+        fr = {}
+        for t_ in np.unique(tpc):
+            for p_ in np.unique(pl):
+                m = inc & (tpc == t_) & (pl == p_)
+                fr[(int(t_), int(p_))] = float(integ[m & on].sum() / max(1e-9, integ[m].sum()))
+        D["footprint_charge_fraction"] = {"tpc%d_plane%d" % k: round(v, 4) for k, v in fr.items()}
+        for (t_, p_), v in fr.items():
+            best = max(w for (tt, _), w in fr.items() if tt == t_)
+            if best > 0.05 and v < 0.2 * best:
+                problems.append("data WC hit labels: tpc%d plane%d footprint fraction %.3f vs %.3f (channel numbering?)"
+                                % (t_, p_, v, best))
+        R["data"] = D
     R["problems"] = problems
     print(json.dumps(R, indent=1))
     if a.json:
