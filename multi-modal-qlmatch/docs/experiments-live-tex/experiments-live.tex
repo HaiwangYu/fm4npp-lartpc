@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-19 22:42 CST}
+\newcommand{\updated}{2026-11-20 03:11 UTC}
 
 \title{qlfm experiments: live status}
 \subtitle{Planned, running and finished tests, with results and takeaways}
@@ -113,6 +113,8 @@
     D2 & 4. real data & beam-on/EXT check of every new model & H & S-side \done; D-side \que{} (7865266) & D: with C2 \\
     D3 & 4. real data & MicroBooNE round 2 (more beam-on/EXT, clean overlay) & FNAL & awaiting approval & -- \\
     D4 & 4. real data & pretraining on real data & -- & future & after categories 3--4 \\
+    D5 & 4. real data & fine-tune on real data with Wire-Cell labels (90\% train / 10\% test, 10 folds) & H & S control \que{} (7865631); D arm \que{} (7865266) & S: $\approx$1 h after start; D: with C2 \\
+    D6 & 4. real data & if D5 works: more WC-labelled real data, data-scaling curve & H / FNAL & \plan{} (needs D3) & after D5 \\
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
     E2 & 5. SBND & full sample: pretrain M CL / M C, 13 fine-tunes & H & \done{} (13/13) & -- \\
@@ -233,7 +235,7 @@
     \begin{column}{0.54\textwidth}
       \centering
       \scriptsize
-      S-pretrained qlfm-M CL, labels in S, 1\% labels, 3 seeds: tested in S and in \textbf{D}\\[2pt]
+      \textbf{Reference arm: pretrained in S} (existing \code{pre/m\_cl\_f0.90}), qlfm-M CL, labels in S (last row: in D), 1\% labels, 3 seeds; tested in S, in \textbf{D} and on real data. The D-pretrained arm is pending.\\[2pt]
       \fitw{\begin{tabular}{lcccccc}
         \toprule
         fine-tune mode & trainable & T1 in S & \textbf{T1 in D} & $\Delta$T1 & T2 in S $\to$ D & \textbf{real beam-on} \\
@@ -270,7 +272,7 @@
 \end{frame}
 
 %=====================================================================
-\begin{frame}{4. Real-data validation (D1--D4)}
+\begin{frame}{4. Real-data validation (D1--D6)}
   \footnotesize
   \begin{columns}[T]
     \begin{column}{0.54\textwidth}
@@ -296,10 +298,12 @@
     \end{column}
     \begin{column}{0.44\textwidth}
       \begin{itemize}\setlength{\itemsep}{3pt}
-        \item \textbf{D1, done:} overlay wins do not carry over. Wire-Cell selects the most real neutrinos. The model drop follows reliance on width.
-        \item \textbf{D2, S side done:} the real-data ranking of the fine-tune modes matches the D test. But the labels-in-D model (0.911 in D) reaches only 0.34 on real data, no better with 3D than with 2D factors: \textbf{modelled width explains only part of the real gap.} D side after C2.
-        \item \textbf{D3:} round-2 samples (more beam-on/EXT, clean overlay), awaiting approval. Today only 70 Wire-Cell-selected beam-on events.
-        \item \textbf{D4:} real-data pretraining, after categories 3--4.
+        \item \textbf{D1, done:} overlay wins don't carry over; WC selects the most real $\nu$; drop follows width reliance.
+        \item \textbf{D2, S side done:} same ranking as the D test, but the labels-in-D model (0.911 in D) reaches only 0.34 here: \textbf{modelled width explains only part of the real gap.}
+        \item \textbf{D3:} round 2 (more beam-on/EXT), awaiting approval; today 70 WC-selected beam-on events.
+        \item \textbf{D4:} real-data pretraining, later.
+        \item \textbf{D5, queued:} fine-tune on real beam-on/EXT with WC labels (2,097 events, 98 WC $\nu$; 10 folds of 90/10). D-pretrained M CL, S-pretrained control. Metric: alignment with WC on the test fold.
+        \item \textbf{D6:} if D5 works: more WC-labelled data, scaling curve.
       \end{itemize}
     \end{column}
   \end{columns}

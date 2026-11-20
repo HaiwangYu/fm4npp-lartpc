@@ -49,6 +49,10 @@ def get_args(argv=None):
                     help="hit widths in training and evaluation (#9): meas = simulated nu hits rescaled to data "
                          "(qlfm.eval_perturb w_meas; meas3d = Sunny's 3D factors), const = every hit the same width "
                          "(no width information)")
+    ap.add_argument("--labels", default="truth", choices=["truth", "wc"],
+                    help="wc (#10, D5): train/test on Wire-Cell labels of a corpus with WC columns (real data): "
+                         "T1 = hit in WC's in-time main cluster of a WC generic-nu event, T2 = WC generic nu; "
+                         "events need wc_in_nusel; tasks hit, evt_nu, light only; needs --width native")
     ap.add_argument("--freeze-blocks", type=int, default=-1,
                     help="finetune mode (#13): freeze the backbone embeddings (layer 0) and blocks 1..K; -1 = none")
     ap.add_argument("--lp-ft", type=int, default=0,
@@ -240,6 +244,13 @@ def main(argv=None):
     sp = np.load(args.splits)
     ev = {k: corpus.ev_array(k) for k in EV_KEYS}
     lab_np = event_labels(ev)
+    if args.labels == "wc":
+        assert set(tasks) <= {"hit", "evt_nu", "light"}, "--labels wc supports hit, evt_nu, light"
+        assert args.width == "native", "--labels wc: real-data hits are already data-like (use --width native)"
+        wc_ok = corpus.ev_array("wc_in_nusel") == 1
+        gen = (corpus.ev_array("wc_generic_nu") == 1).astype(np.int64)
+        lab_np["hit"] = (wc_ok, None)
+        lab_np["evt_nu"] = (wc_ok, gen)
     lab_np["light"] = (lab_np["light"][0], None)
     lab_np["hit"] = (lab_np["hit"][0], None)
     lab = {t: (torch.from_numpy(lab_np[t][0]).to(dev),
@@ -284,7 +295,8 @@ def main(argv=None):
             class_w[t] = torch.tensor((cnt.sum() / np.maximum(cnt, 1) / 3) ** 0.5, dtype=torch.float32, device=dev)
 
     mk = lambda idx, shuffle, bs: torch.utils.data.DataLoader(
-        EventDataset(corpus, idx, truth=True), batch_size=bs, shuffle=shuffle, collate_fn=collate,
+        EventDataset(corpus, idx, truth=True, wc_labels=args.labels == "wc"), batch_size=bs, shuffle=shuffle,
+        collate_fn=collate,
         num_workers=args.workers, pin_memory=True, drop_last=shuffle, persistent_workers=shuffle)
     mbs = max(1, args.bs // args.accum)
     trl = mk(tr, True, max(1, min(args.bs, max(2, len(tr) // 2)) // args.accum))

@@ -17,7 +17,7 @@ Throughout:
 | **1. Measure the problem** | How much does the simulation mismatch move the scores, and where? | A1 (2D width test), A2 (Joshua's 3D, per-plane and light checks), A3 (V-plane variant), A4 (feature probes) | A1–A2 done, A3–A4 planned or queued |
 | **2. Labels in the data-like domain** | Upper bound: what if we had labelled data-like events? | B1 (fix b), B2 (sim→real), B3 (real→real) | B1 done; B2–B3 planned by Joshua and queued by Haiwang |
 | **3. Foundation-model paradigm** | Does pretraining in the data-like domain plus freezing stop sim labels teaching the width shortcut? | C1 (pretrain in D), C2 (real→sim, frozen/full), C3 (partial freezing, head-first), C4 (naive baseline), C5 (explicit invariance), C6 (self-training) | C3 running, rest queued or planned |
-| **4. Validate on real data** | Do the gains hold on real beam-on data? | D1 (first check), D2 (all new models), D3 (round-2 data), D4 (real-data pretraining) | D1 done; D3 awaits approval |
+| **4. Validate on real data** | Do the gains hold on real beam-on data? | D1 (first check), D2 (all new models), D3 (round-2 data), D4 (real-data pretraining), D5 (fine-tune on WC-labelled real data), D6 (data scaling) | D1 done; D3 awaits approval |
 | **5. SBND** | New detector, all-simulation testbed | E1 (10k tests), E2 (full run) | E2 running |
 | **6. Paper** | What can we fairly claim? | F1 (width fairness for PTv3), F2 (ME1 headline) | proposed |
 
@@ -48,6 +48,8 @@ How the categories fit together:
 | D2 | Real-data check of every new model | H | 4. Validate on real data | planned (#13 phase 3; suggested for J) | <1 nh |
 | D3 | MicroBooNE round 2: more beam-on/EXT, clean overlay | FNAL session | 4. Validate on real data | awaiting approval | FNAL side |
 | D4 | Pretraining on real data | – | 4. Real data in training | future (after #13) | TBD |
+| D5 | Fine-tune on real data with Wire-Cell labels (D-pretrained M CL; 90% train / 10% test, 10 folds) | H | 4. Real data in training | queued (2026-11-20) | ~1 nh |
+| D6 | If D5 works: more WC-labelled real data, data-scaling curve | H / FNAL | 4. Real data in training | planned (needs D3) | TBD |
 | E1 | SBND 10k pipeline tests | H | 5. New detector | done (#11) | ~3 nh |
 | E2 | SBND full: pretrain M CL and M C, 13 fine-tunes | H | 5. New detector | running (7862256) | ~11 nh |
 | F1 | Fair width comparison: PTv3 with width, or no width anywhere | – | 6. Paper fairness | proposed (#12) | ~3 nh |
@@ -218,6 +220,22 @@ Everything in categories 1–3 uses a *modelled* data domain. These items check 
 - **Purpose:** more statistics for D1/D2 (only 70 Wire-Cell-selected beam-on events today), and clean overlay events not in our training set.
 - **Procedure:** produce more beam-on/EXT; overlay from public files missing from the published HDF5 (BNB) and the two unused νe files.
 - **Possible outcomes:** firmer real-data numbers, and a real-data pool large enough for fine-tuning with Wire-Cell labels.
+
+### D5. Fine-tune on real data with Wire-Cell labels, queued (2026-11-20)
+- **Purpose:** use the Wire-Cell-labelled real data directly as a training set. Does a model fine-tuned on real events reproduce Wire-Cell's ν selection on held-out real events, where simulation-trained models found only 9–34% of Wire-Cell's ν charge?
+- **Procedure:**
+  - Events: the 2,097 real beam-on/EXT events with Wire-Cell output (98 Wire-Cell ν candidates).
+  - Labels: T1 = hit in WC's in-time main cluster of a WC generic-ν event; T2 = WC generic ν (`train_multitask --labels wc`).
+  - 10 folds, stratified by the WC decision, each 90% train / 10% test (`scripts/make_wc_folds.py`).
+  - Full fine-tune of the D-pretrained qlfm-M CL (main arm) and of the S-pretrained one (control), T1 + T2 + T5.
+  - Test: alignment with Wire-Cell on the held-out fold, compared with Pandora and with the simulation-trained models on the same events.
+- **Possible outcomes:**
+  - High alignment: a path to real-data adaptation with Wire-Cell as labeller. D6 then measures how it scales with more data.
+  - Low alignment with only ~88 ν events per fold: the sample is too small. D6 is needed to say more.
+
+### D6. Data scaling with more Wire-Cell-labelled real data, planned
+- **Purpose:** if D5 works, measure how alignment grows with the number of labelled real events.
+- **Procedure:** curate more WC-labelled beam-on/EXT (MicroBooNE round 2, D3). Repeat D5 at several training-set sizes.
 
 ### D4. Pretraining on real data, future
 - **Purpose:** the end goal of the FM paradigm.
