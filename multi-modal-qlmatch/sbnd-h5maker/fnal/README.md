@@ -20,3 +20,10 @@ Real-data HDF5 from FermiGrid inputs, option B (Wire-Cell labels from the WCLoca
 - Grid test 2026-11-20, cluster 87546314, one pair each: OK, `check_h5` clean.
   - About 14 MB and 1–1.5 min per 50-event pair.
   - The first try (94508500) failed on bash 4.2's unbound empty array under `set -u`, now fixed.
+- `h5pair.sh` passes every `pr/<x>/` directory as `--wc-dir`. This matters for the two beam-off PARTIAL pairs (0cec6931, ca477d17), where a step-1 crash split the Wire-Cell output into segments (`pr/s0-42`, `pr/s43-50`) instead of `pr/all`.
+  - The grid run (30819860) used the older script, so those two pairs came out with `wc_missing` 50.
+  - They were rerun locally on 2026-11-21 and now have `wc_missing` 1, the skipped event.
+  - The old files are in `stale-wcmissing/`.
+- `verify-full.py <list> <output base> <lists dir>`: checks each pair's `.done` against the files.
+  - Writes `status-<sample>.tsv` and `sha256sum-<sample>.txt`.
+  - Prints the events, `wc_missing` and `check_h5` problem counts.

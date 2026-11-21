@@ -13,11 +13,12 @@ t0=$(date +%s)
 bash "$STEP0" "$R1" "$W/fs/$(basename "$R1" .root)_frameshift.root" > "$L/$B.frameshift.out" 2>&1 || { echo "FAIL frameshift rc $?"; cp "$W"/fs/frameshift-lar.log.gz "$L/$B.frameshift-lar.log.gz" 2>/dev/null; exit 11; }
 cp "$W"/fs/frameshift-lar.log.gz "$L/$B.frameshift-lar.log.gz"; t1=$(date +%s)
 mkdir -p "$W/wc" && tar -C "$W/wc" -xf "$TAR" || { echo "FAIL untar"; exit 12; }
-nwc=$(ls -d "$W"/wc/pr/all/pr_evt* 2>/dev/null | wc -l)
+# a PARTIAL pair (step-1 crash) has segment dirs pr/s<a>-<b> instead of pr/all: pass every pr/<x> dir
+wcd=("$W"/wc/pr/*/); nwc=$(ls -d "$W"/wc/pr/*/pr_evt* 2>/dev/null | wc -l)
 mx=(); [ "$MAXEV" -gt 0 ] && mx=(--max-events "$MAXEV")
-python3 "$H5M/sbnd_h5maker.py" "$OUT" --data --reco1 "$W/fs/$(basename "$R1" .root)_frameshift.root" --wc-dir "$W/wc/pr/all" ${mx[@]+"${mx[@]}"} > "$L/$B.h5maker.log" 2>&1 || { echo "FAIL h5maker rc $?"; tail -5 "$L/$B.h5maker.log"; exit 13; }
+python3 "$H5M/sbnd_h5maker.py" "$OUT" --data --reco1 "$W/fs/$(basename "$R1" .root)_frameshift.root" --wc-dir "${wcd[@]}" ${mx[@]+"${mx[@]}"} > "$L/$B.h5maker.log" 2>&1 || { echo "FAIL h5maker rc $?"; tail -5 "$L/$B.h5maker.log"; exit 13; }
 t2=$(date +%s)
 python3 "$H5M/check_h5.py" "$OUT" --json "$D/$B.check.json" > "$L/$B.check.log" 2>&1; crc=$?
-echo "OK h5pair $B: frameshift $((t1-t0)) s, h5maker $((t2-t1)) s, wc dirs $nwc, check rc $crc"
+echo "OK h5pair $B: frameshift $((t1-t0)) s, h5maker $((t2-t1)) s, wc dirs $nwc in ${#wcd[@]} pr/ dir(s), check rc $crc"
 rm -rf "$W"
 exit $([ $crc = 0 ] && echo 0 || echo 14)
