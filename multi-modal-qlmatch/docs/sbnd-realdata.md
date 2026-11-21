@@ -126,3 +126,11 @@ Inside each:
 
 ## Log
 - 2026-11-20: recipe written; `sbnd-h5maker` 0.5 (`--data`) tested on Aurora (job 9109996) on the 67 selected real-data events with aurora-r2 output (sbnd-wirecell-production #7); MC output unchanged. Inputs (§2) and the Wire-Cell option (§3) wait for the owner.
+- 2026-11-20 (owner): inputs are beam-on = open FixedDev BNB, runs 18255/18259 (`data_MCP2025C_Fall25-Run1_BNB_FixedDev_bnblight_v10_14_02_reco1_sbnd`), and beam-off = the fg1 InTime-Run1 set. Wire-Cell = **option B** (WCLocal2026Nov16, 0.38.0 tracking-pr tars, copied to persistent). test10 made on sbndbuild03 in the SL7 image; reviewed OK by `fmlar_polaris`. (porting_sbndbuild03)
+- 2026-11-21: full production done (porting_sbndbuild03).
+  - FermiGrid 30819860@jobsub04: 288 jobs, 37.5 CPU-h, no restarts.
+  - Results: 1,817 beam-on files (89,946 events, 4.621e18 POT from the CAFs, 26.3 GB) and 1,058 beam-off files (49,970 events, 15.0 GB).
+  - On Eagle `sbnd-data-{bnb-opendata,offbeam-intime-run1}/{full,lists,README.md}`: 0 sha256 failures.
+  - The two beam-off PARTIAL pairs were rerun with the `pr/` segment-dir fix (1f6c1a7).
+  - 8 beam-off files fail the heuristic footprint-fraction check, from low candidate counts. This is a review item.
+  - Scripts: `sbnd-h5maker/fnal/`.
