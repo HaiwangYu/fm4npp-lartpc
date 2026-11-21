@@ -14,6 +14,8 @@ import json
 import h5py
 import numpy as np
 
+# data mode: minimum number of events with a WC nu candidate before the footprint-fraction numbering check applies
+MIN_CAND_EVENTS_FOOTPRINT = 10
 
 def offsets(f, table, n_ev):
     sc = f[table + "/event_id.seq_cnt"][:]
@@ -175,15 +177,21 @@ def main():
             D["cosmict_flag"] = {str(k): int(v) for k, v in zip(*np.unique(col(f, "wc_event_table", "cosmict_flag"), return_counts=True))}
         # charge fraction on the WC footprint per (tpc, plane) in candidate events: a numbering bug shows as one plane
         # far below the others of the same TPC
-        fr = {}
+        fr, nfp = {}, {}
         for t_ in np.unique(tpc):
             for p_ in np.unique(pl):
                 m = inc & (tpc == t_) & (pl == p_)
                 fr[(int(t_), int(p_))] = float(integ[m & on].sum() / max(1e-9, integ[m].sum()))
+                nfp[(int(t_), int(p_))] = int((m & on).sum())
         D["footprint_charge_fraction"] = {"tpc%d_plane%d" % k: round(v, 4) for k, v in fr.items()}
+        D["footprint_hits"] = {"tpc%d_plane%d" % k: v for k, v in nfp.items()}
+        # a few candidates make the per-plane fractions noisy (8 of 1,058 beam-off files with 2-5 candidates fired the
+        # rule, #14): apply it only with enough candidate events; below that the fractions are still reported
+        n_cand_ev = int(cand_ev.sum())
+        D["footprint_check_applied"] = n_cand_ev >= MIN_CAND_EVENTS_FOOTPRINT
         for (t_, p_), v in fr.items():
             best = max(w for (tt, _), w in fr.items() if tt == t_)
-            if best > 0.05 and v < 0.2 * best:
+            if D["footprint_check_applied"] and best > 0.05 and v < 0.2 * best:
                 problems.append("data WC hit labels: tpc%d plane%d footprint fraction %.3f vs %.3f (channel numbering?)"
                                 % (t_, p_, v, best))
         R["data"] = D

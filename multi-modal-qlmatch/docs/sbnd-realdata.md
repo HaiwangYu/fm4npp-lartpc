@@ -65,7 +65,7 @@ New in 0.5 (`sbnd_h5maker.py --data`):
 - `event_table` gains (data and MC): `time_s` (unix time of the event), `has_frameshift`, `timing_type`, `frame_apply_at_caf_ns`, `frame_hlt_beamgate_ns`, `frame_hlt_crtt1_ns`, `frame_tdc_crtt1_ns`, `frame_tdc_bes_ns`, `frame_tdc_rwm_ns` (the `sbnd::timing::FrameShiftInfo` of the FrameShift step; MC: 0 with `has_frameshift` 0), and the Wire-Cell bundle census `wc_n_bundle`, `wc_n_bundle_cosmic` (`T_bundle` rows, and those vetoed as cosmic).
 - `wc_event_table` gains `cosmict_flag` (the cosmic-tagger verdict) and `matched_flash_gid`. The file attribute `wc_label_notes` states the label definition of §3.
 - Everything else is as for MC: `hit_table` (gaushit), `ophit_table` (`ophitpmt`, window −10…40 µs by default), `opflash_table` + `opflashsumpe_table` (`opflashtpc0/1`), `wc_event_table`, `wc_hit_table`.
-- `check_h5.py` adds a `data` block: the truth tables must be empty, FrameShift coverage, `cosmict_flag` counts, and the footprint charge fraction per (TPC, plane) as the numbering check (there is no truth to compute an efficiency).
+- `check_h5.py` adds a `data` block: the truth tables must be empty, FrameShift coverage, `cosmict_flag` counts, and the footprint charge fraction per (TPC, plane) as the numbering check (there is no truth to compute an efficiency). The check flags a plane below 0.2 × the best plane of its TPC; it applies only to files with at least 10 events with a candidate (`footprint_check_applied`), because a few candidates make the fractions noisy. The fractions and footprint hit counts are reported either way.
 
 **Light timing in data.** `ophit_table.peaktime` and `opflash_table.time` are written as in reco1 (µs, trigger clock). In data the trigger is the flash itself, so the beam flash sits at a fixed −0.74 µs. Wire-Cell adds `frame_apply_at_caf` to every light time (`FlashTensorToOpticalPCs`, `correct_flash_time`), which puts the beam flash on the beam-spill clock the simulation uses:
 
@@ -95,7 +95,7 @@ Per pair on FermiGrid:
 1. `ifdh cp` the reco1 file.
 2. FrameShift: `aurora/bin/step0-frameshift.sh <reco1> <out>_frameshift.root` (the same step 0 as the Wire-Cell data jobs).
 3. Untar `<id>.tracking-pr.tar` (option A: the new step-2 tar; option B: the `wcl1116-fg-*` one).
-4. `python sbnd_h5maker.py <id>.h5 --data --reco1 <out>_frameshift.root --wc-dir <untar>/pr/all`
+4. `python sbnd_h5maker.py <id>.h5 --data --reco1 <out>_frameshift.root --wc-dir <untar>/pr/<x> [--wc-dir ...]`: pass **every** `pr/<x>/` dir. A complete pair has only `pr/all`; a Wire-Cell PARTIAL pair (a step-1 crash) has segment dirs `pr/s<a>-<b>/` instead, and reading only `pr/all` leaves all its events `wc_missing` (`fnal/h5pair.sh` does this since 1f6c1a7).
 5. `python check_h5.py <id>.h5 --json <id>.check.json`; keep `<id>.h5`, `<id>.h5.stats.json`, `<id>.check.json`, the log.
 
 Environment (as `sbnd-h5maker/env.sh`, which is written for Aurora): SL7 image; `setup sbndcode v10_14_02_03 -q e26:prof` and `setup gallery v1_22_06 -q e26:prof` from CVMFS; the UPS python 3.9 plus these wheels unpacked on `PYTHONPATH` (a wheel is a zip file, no pip needed): `uproot 5.3.10`, `awkward 2.6.6`, `awkward_cpp 35`, `h5py 3.11.0`, `cramjam 2.8.3`, `xxhash 3.4.1`, `fsspec 2024.6.1`, `packaging 24.1`, `importlib_metadata 8.0.0`, `zipp 3.19.2`, `typing_extensions 4.12.2` (cp39 manylinux2014). The `--sce-map` default is an Aurora path; `--data` does not read it.
@@ -134,3 +134,4 @@ Inside each:
   - The two beam-off PARTIAL pairs were rerun with the `pr/` segment-dir fix (1f6c1a7).
   - 8 beam-off files fail the heuristic footprint-fraction check, from low candidate counts. This is a review item.
   - Scripts: `sbnd-h5maker/fnal/`.
+- 2026-11-21: `check_h5` applies the footprint-fraction check only with ≥ 10 candidate events. The 8 flagged beam-off files have 2–5; on 040c5aaf (5 candidates) the low plane is the collection plane in both TPCs (30 vs ~950 footprint hits in TPC 0), consistent with near-vertical tracks crossing few vertical collection wires (not verified). The 67-event data tests (48 and 20 candidate events) still apply it with no problems. (prod_aurora)
