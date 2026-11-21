@@ -16,6 +16,7 @@ SBND files (sbnd-h5maker, issue #11; set QLFM_DETECTOR=sbnd) differ in:
 
 MicroBooNE round-1 files (issue #10; datasets/uboone_round1/README.md) differ in:
   * real data (beam_on, ext) has no truth columns: is_data = 1 and the truth fields keep neutral defaults
+    (also SBND --data files, attribute is_data = 1; their ophit/flash times are moved to the beam clock)
     (nu_pdg 0, is_cc -1, energies 0, vertices NaN, no hit deposits), so every event reads as T2 class 0;
   * Wire-Cell labels, copied when present: hit_wc_main (hit in WC's in-time main cluster) and the event columns
     wc_generic_nu, wc_in_nusel, wc_in_checkout, ... as ev_wc_*. WC nu-hit label = hit_wc_main & ev_wc_generic_nu,
@@ -76,7 +77,11 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
 
     # ---------------- per-event truth ----------------
     ev, _ = rd("event_table", 0, n)
-    is_data = "nu_pdg" not in ev
+    is_data = "nu_pdg" not in ev or int(f.f.attrs.get("is_data", 0)) == 1
+    # SBND real data (sbnd-h5maker --data, #14): reco1 optical times are on the trigger clock; shift them onto the
+    # beam clock used by the simulation and Wire-Cell: t_beam = peaktime + frame_apply_at_caf_ns / 1000
+    t_shift = (np.asarray(ev["frame_apply_at_caf_ns"], np.float64) / 1000.0
+               if sbnd and is_data and "frame_apply_at_caf_ns" in ev else None)
     if is_data:         # real data (round-1 beam_on / ext): neutral truth
         nan3 = np.full((n, 3), np.nan, np.float32)
         ev.update(nu_pdg=np.zeros(n), is_cc=np.full(n, -1), nu_energy=np.zeros(n), lep_energy=np.zeros(n),
@@ -227,6 +232,8 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
             assert int(o["hit_channel"].max()) < N_PMT, f"{path}: PMT channel >= {N_PMT}"
             s0 = os_[lo]
             sl = slice(s0, s0 + len(oevt))
+            if t_shift is not None:
+                o["peaktime"] = o["peaktime"] + t_shift[oevt]
             O["ch"][sl] = o["hit_channel"]
             O["t"][sl] = o["peaktime"]
             O["width"][sl] = np.clip(o["width"], 0, 65000)
@@ -236,6 +243,8 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
 
         # ---- beam flashes (baseline / audit only) ----
         fl, flevt = rd("opflash_table", lo, hi, ["flash_id", "time", "totalpe"])
+        if t_shift is not None:
+            fl["time"] = fl["time"] + t_shift[flevt]
         if sbnd:        # SBND flashes span the +-1.5 ms PMT readout: keep those in the light-token window
             m = (fl["time"] >= G.LIGHT_EDGES[0]) & (fl["time"] < G.LIGHT_EDGES[-1])
             fl, flevt = {k: v[m] for k, v in fl.items()}, flevt[m]
