@@ -7,8 +7,10 @@ Per merged shard (meta.json "sources" = the full/ files it was built from, in or
   hit_pnd_nu_ct0.npy  <- the same, restricted to candidates that pass the PR cosmic tagger (wc_event_table.cosmict_flag == 0)
   hit_pnd_nu_r2.npy   <- the previous (aurora-r2) hit_pnd_nu, kept once for reference
 A marker file wc_labels_<tag>.done makes reruns skip finished shards.
+--tag full (real data, whose full/ files are already WCT 0.38.0): reads the sources as they are, checks that the
+footprint equals the converter's hit_pnd_nu and only adds hit_pnd_nu_ct0 (no _r2 copy).
 
-Usage: refresh_wc_labels.py SAMPLE_CACHE_DIR [--tag wcl1116] [--jobs 3]
+Usage: refresh_wc_labels.py SAMPLE_CACHE_DIR [--tag wcl1116|full] [--jobs 3]
 """
 import argparse
 import glob
@@ -56,6 +58,14 @@ def refresh(job):
     parts = [labels(src.replace("/full/", f"/{tag}/")) for src in meta["sources"]]
     pnd = np.concatenate([p for p, _ in parts]); ct0 = np.concatenate([c for _, c in parts])
     assert len(pnd) == meta["n_hits"], f"{d}: {len(pnd)} hits vs {meta['n_hits']}"
+    if tag == "full":
+        cur = np.load(os.path.join(d, "hit_pnd_nu.npy"))
+        assert (cur == pnd).all(), f"{d}: footprint differs from the converted hit_pnd_nu"
+        np.save(os.path.join(d, "hit_pnd_nu_ct0.tmp.npy"), ct0)
+        os.replace(os.path.join(d, "hit_pnd_nu_ct0.tmp.npy"), os.path.join(d, "hit_pnd_nu_ct0.npy"))
+        stats = dict(n_hits=int(len(pnd)), frac_new=float(pnd.mean()), frac_ct0=float(ct0.mean()))
+        json.dump(stats, open(done, "w"))
+        return d, stats
     old = os.path.join(d, "hit_pnd_nu.npy"); keep = os.path.join(d, "hit_pnd_nu_r2.npy")
     if not os.path.exists(keep):
         os.replace(old, keep)
