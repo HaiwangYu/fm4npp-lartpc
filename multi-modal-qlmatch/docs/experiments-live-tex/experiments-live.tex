@@ -23,7 +23,7 @@
 \newcommand{\iss}[1]{\href{\gh/issues/#1}{\color{blue!60!black}\##1}}
 \newcommand{\doc}[1]{\href{\gh/blob/main/multi-modal-qlmatch/docs/#1}{\color{blue!60!black}\texttt{#1}}}
 \setlength{\tabcolsep}{4pt}
-\newcommand{\updated}{2026-11-20 21:55 UTC}
+\newcommand{\updated}{2026-11-22 14:50 UTC}
 % real beam-on agreement of the D-pretrained runs (filled when the reports finish)
 \newcommand{\PDfbReal}{\good{0.25}}
 \newcommand{\PDlpReal}{0.12}
@@ -32,7 +32,7 @@
 \title{qlfm experiments: live status}
 \subtitle{Planned, running and finished tests, with results and takeaways}
 \author{Haiwang Yu}
-\institute{fm4npp-lartpc \;\textbullet\; issues \iss{8}--\iss{13}}
+\institute{fm4npp-lartpc \;\textbullet\; issues \iss{8}--\iss{14}}
 \date{Last updated: \updated}
 
 \begin{document}
@@ -57,6 +57,7 @@
         \item \iss{11} SBND samples and training (E1, E2)
         \item \iss{12} Tracker: data/sim gap, real data, SBND
         \item \iss{13} Domain-shift FM study (A4, B2, B3, C1--C5)
+        \item \iss{14} SBND real data: production, first look, model vs Wire-Cell (E3, E4)
       \end{itemize}
     \end{column}
     \begin{column}{0.50\textwidth}
@@ -66,6 +67,7 @@
         \item \doc{domain-shift-fm.md}: domain-shift study plan
         \item \doc{status-2026-11-13.pdf}: status slides, 13 Nov
         \item \doc{sbnd-h5maker.md}, \doc{data-inventory-sbnd.md}: SBND samples
+        \item \doc{sbnd-realdata.md}: SBND real-data recipe and production
         \item \doc{uboone-data-curation.md}: MicroBooNE real data
         \item \doc{paper-campaign.md}: paper plan and ledger
       \end{itemize}
@@ -122,6 +124,8 @@
     \midrule
     E1 & 5. SBND & 10k pipeline and transfer tests & H & \done & -- \\
     E2 & 5. SBND & full sample: pretrain M CL / M C, 13 fine-tunes & H & \done{} (13/13) & -- \\
+    E3 & 5. SBND & real data: 90k beam-on + 50k off-beam converted; first look vs sim & FNAL / H & \done & -- \\
+    E4 & 5. SBND & real data: 13 models vs Wire-Cell (beam-on vs off-beam) & H & \done & -- \\
     \midrule
     F1 & 6. fairness & width for PTv3 too, or no width anywhere & -- & \prop & needs decision \\
     F2 & 6. fairness & paper ME1 headline & H & depends on 1--4 & -- \\
@@ -404,6 +408,41 @@
 \end{frame}
 
 %=====================================================================
+\begin{frame}{5b. SBND real data (E3, E4; \iss{14})}
+  \footnotesize
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \centering
+      \scriptsize
+      E4: all 89,946 beam-on / 49,970 off-beam events (light-triggered streams); WC = WCT 0.38.0 $\nu$-candidate footprint\\[2pt]
+      \fitw{\begin{tabular}{lcccc}
+        \toprule
+        & \multicolumn{2}{c}{share of WC $\nu$ charge found} & \multicolumn{2}{c}{beam-on pass rate} \\
+        model (3 seeds unless noted) & \textbf{sim test} & \textbf{beam-on} & at off-beam 5.8\% & + cosmic tagger, at 3.2\% \\
+        \midrule
+        \textbf{Wire-Cell} & -- & -- & \good{44.9\%} & \good{38.6\%} \\
+        SBND-pre CL, fine-tuned & 0.90--0.91 & \bad{0.48--0.52} & 31.1--32.2\% & 25.8--26.9\% \\
+        SBND-pre C+XF           & 0.88--0.89 & 0.64--0.67 & 31.4--32.7\% & 26.2--27.3\% \\
+        MicroBooNE-pre CL       & 0.89 & 0.53--0.57 & 27.7--31.4\% & 20.2--24.6\% \\
+        SBND-pre CL, frozen (1) & 0.85 & \bad{0.35} & 18.1\% & 12.6\% \\
+        no pretraining          & 0.77 & 0.52--0.55 & 16.3--19.5\% & 11.1--13.5\% \\
+        \bottomrule
+      \end{tabular}}\\[3pt]
+      E3 first look, data / sim (20k events each): hit width V 0.97, Y 0.955, U 1.00, \emph{flat in drift};
+      Y-hit charge 10th pct 180 vs 304; beam-on light $\approx$0.3\,$\mu$s later; off-beam flash time alone separates (AUC 0.62).
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{itemize}\setlength{\itemsep}{3pt}
+        \item \textbf{The sim-to-data gap is present on SBND.} Agreement with Wire-Cell drops from $\approx$0.9 on sim to 0.5--0.65 on beam-on; what the models tag stays mostly inside WC's footprint (0.80--0.86): they lose real $\nu$ hits rather than tag cosmics.
+        \item \textbf{Event level holds up better:} pretrained fine-tuned models keep about 2/3 of WC's beam-on excess over off-beam.
+        \item \textbf{Ranking:} fine-tuned pretrained $>$ frozen, no pretraining. C+XF keeps more WC charge on data than CL (0.65 vs 0.50).
+        \item \textbf{Cause not tested yet.} SBND widths differ by a constant per plane (not a drift-dependent diffusion term as in MicroBooNE). Next: width test on SBND sim, width-randomised fine-tune.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%=====================================================================
 \begin{frame}{6. Paper fairness (F1, F2)}
   \footnotesize
   \begin{itemize}\setlength{\itemsep}{6pt}
@@ -433,13 +472,13 @@
 
 %=====================================================================
 \begin{frame}{Takeaways so far, by category}
-  \footnotesize
-  \begin{enumerate}\setlength{\itemsep}{4pt}
+  \scriptsize
+  \begin{enumerate}\setlength{\itemsep}{3pt}
     \item \textbf{Measure the problem: clear.} Hit width is the dominant data/sim mismatch; charge and light corrections are small for T1/T2. qlfm-M CL is the most width-sensitive ($-0.29$ T1 with 3D factors). The network amplifies the width difference to nearly perfect S/D separability by mid-depth.
     \item \textbf{Labels in the data-like domain: clear.} With labelled data-like events, the simulation score comes back (0.911 vs 0.919). That is an upper bound, not a recipe for real data. On real data, 2D data-like training recovered only part of the gap.
     \item \textbf{FM paradigm: clear in D, weak on real data so far.} In D (3 seeds): from the S backbone every freezing mode transfers worse; from the D backbone \emph{partial} freezing transfers best (6 blocks frozen 0.767, 49\% of the gap, sim labels only), while full fine-tuning gives the gain back (0.652 vs 0.631). On real beam-on the gain is small (0.25 vs 0.20). \textit{Haiwang to confirm the summary.}
     \item \textbf{Real-data validation: clear for now.} Overlay results overstate real-data performance; Wire-Cell wins on beam-on. The D test ranks methods the same way as real data, but recovering in D (0.911) brings only 0.34 on real data: the modelled width shift is a partial proxy. Fine-tuning on $\approx$1,900 WC-labelled real events (D5) does not help yet: too few $\nu$ events (98).
-    \item \textbf{SBND: clear.} SBND pretraining gives the best model (T1 0.921, 3 seeds) ahead of MicroBooNE transfer (0.903) and scratch (0.804), and nearly matches Wire-Cell (0.931) at 1\% labels. Light in pretraining beats light at the head here too. Open: the data/sim question for SBND.
+    \item \textbf{SBND: clear.} SBND pretraining gives the best model (T1 0.921, 3 seeds) ahead of MicroBooNE transfer (0.903) and scratch (0.804), and nearly matches Wire-Cell (0.931) at 1\% labels. Light in pretraining beats light at the head here too. \textbf{On real SBND data (E4) the gap is present}: agreement with Wire-Cell falls from 0.9 (sim) to 0.5--0.65 on beam-on, and models select about 2/3 of Wire-Cell's beam-on excess; the cause (width?) is not tested yet. \textit{Haiwang to confirm the summary.}
     \item \textbf{Paper fairness: not clear.} The width-fair comparison (F1) has not been run, and the ME1 headline depends on categories 3--4. \textit{Haiwang to summarise.}
   \end{enumerate}
 \end{frame}
