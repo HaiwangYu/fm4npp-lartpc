@@ -182,7 +182,7 @@ def load_run(run, dev):
     for k, v in a.items():
         if hasattr(ns, k) and k not in ("n_test", "n_val"):
             setattr(ns, k, v)
-    backbone = build_backbone(ns.backbone, ns, ns.fm if ns.mode != "scratch" else None)
+    backbone = build_backbone(ns.backbone, ns, ns.fm if ns.mode != "scratch" and ns.fm != "none" else None)  # --fm none: from scratch
     if multitask:
         model = MultiTaskModel(backbone, list(a["tasks"]), ns.mode, ns.late_light, ns.hit_feat)
         model.width = a.get("width", "native")       # widths the model was trained with (applied in its forward)
