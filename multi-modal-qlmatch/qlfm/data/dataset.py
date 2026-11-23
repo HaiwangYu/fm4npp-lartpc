@@ -75,7 +75,9 @@ class EventDataset(torch.utils.data.Dataset):
         self.truth = truth
         self.ev_keys = ev_keys
         # wc_labels (issue #10, D5): the T1 target column hit_nu_edep is replaced by the Wire-Cell nu label,
-        # hit in WC's in-time main cluster & event passes WC generic nu (1.0 = nu hit), for training on real data
+        # hit in WC's in-time main cluster & event passes WC generic nu (1.0 = nu hit), for training on real data.
+        # SBND (#14): wc_labels = a hit column name, "pnd_nu" (WC nu-candidate footprint) or "pnd_nu_ct0"
+        # (candidates passing the PR cosmic tagger), used as the T1 target
         self.wc_labels = wc_labels
 
     def __len__(self):
@@ -91,7 +93,9 @@ class EventDataset(torch.utils.data.Dataset):
         cols = HIT_FEAT + (("tpc",) if sh.has_tpc else ()) + (HIT_TRUTH if self.truth else ())
         for k in cols:
             out["hit_" + k] = np.asarray(sh.hit(k)[h0:h0 + hn])
-        if self.wc_labels:
+        if isinstance(self.wc_labels, str):
+            out["hit_nu_edep"] = (np.asarray(sh.hit(self.wc_labels)[h0:h0 + hn]) > 0).astype(np.float16)
+        elif self.wc_labels:
             gen = bool(sh.ev("wc_generic_nu")[j]) and bool(sh.ev("wc_in_nusel")[j])
             out["hit_nu_edep"] = (np.asarray(sh.hit("wc_main")[h0:h0 + hn]) > 0).astype(np.float16) * float(gen)
         for k in OPH:

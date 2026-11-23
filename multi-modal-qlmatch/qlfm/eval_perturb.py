@@ -50,12 +50,15 @@ F_MEAS_3D = {2: [1.000, 0.967, 0.941, 0.926, 0.915, 0.903],      # Y
 US_PER_TICK, V_DRIFT_CM_US, MAX_DRIFT_CM = 0.5, 0.1098, 256.35
 D_DATA, D_SIM, S0_US2 = 3.74e-6, 6.40e-6, 1.9                    # cm2/us, cm2/us, us2
 WIDTH_CONST = 4.0                                                # ticks, about the median hit rms
+# SBND (#14, E3 first look): median hit RMS beam-on data / BNB CV simulation per plane U, V, Y, flat in drift
+F_SBND = {0: 1.007, 1: 0.970, 2: 0.956}
 
 VARIANTS = {"nominal": (None, 0.0), "w_meas": ("meas", 0.0), "w_meas3d": ("meas3d", 0.0), "w_diff": ("diff", 0.0),
             "q-5": (None, -0.05), "q-2": (None, -0.02), "q+2": (None, 0.02), "q+5": (None, 0.05),
             "w_meas_q-5": ("meas", -0.05), "w_meas_q+5": ("meas", 0.05),
             "w_inv": ("inv", 0.0), "w_c98": ("c0.98", 0.0), "w_c95": ("c0.95", 0.0), "w_meas_all": ("meas_all", 0.0),
-            "w_const": ("const", 0.0)}
+            "w_const": ("const", 0.0),
+            "w_sbnd": ("sbnd_all", 0.0)}      # SBND: every hit is simulated (CORSIKA cosmics)
 
 
 def _interp(x, xp, fp):
@@ -69,6 +72,11 @@ def width_factor(plane, tick, kind):
     d = tick.float() - ANODE_TICK
     if kind == "inv":
         return 1 / width_factor(plane, tick, "meas")
+    if kind == "sbnd":
+        f = torch.ones_like(d)
+        for p, v in F_SBND.items():
+            f[plane == p] = v
+        return f
     if kind.startswith("c"):
         return torch.full_like(d, float(kind[1:]))
     if kind in ("meas", "meas3d"):
