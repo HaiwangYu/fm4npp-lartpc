@@ -113,7 +113,7 @@ def tokenize_charge(plane, wire, time, q, rms, evt, n_events, cfg: TokCfg, gener
 
 
 def tokenize_light(ch, t, pe, evt, n_events, cfg: TokCfg):
-    """ophits -> 32 tokens per event with a log1p(PE) time profile."""
+    """ophits -> one token per PMT (G.N_PMT: 32 MicroBooNE, 120 SBND) with a log1p(PE) time profile + log1p total."""
     dev = ch.device
     edges = torch.tensor(cfg.light_edges, device=dev, dtype=torch.float32)
     nb = len(cfg.light_edges) - 1
