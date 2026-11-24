@@ -8,6 +8,7 @@ import torch
 
 HIT_FEAT = ("plane", "wire", "time", "integral", "rms")
 HIT_TRUTH = ("nu_edep", "cat", "pnd_nu")
+BLOB_COLS = ("x", "y", "z", "q", "ext", "tpc", "cluster", "nu", "trackid")   # cache blob_<col>.npy (#16)
 OPH = ("ch", "t", "pe")
 
 
@@ -18,6 +19,9 @@ class Shard:
         self.n = self.meta["n_events"]
         self._ev, self._hit, self._oph = {}, {}, {}
         self.has_tpc = os.path.exists(os.path.join(d, "hit_tpc.npy"))       # SBND (2 TPCs)
+        self.has_flash = os.path.exists(os.path.join(d, "ev_fl_pmt.npy"))   # brightest in-window flash
+        self.has_blobs = os.path.exists(os.path.join(d, "ev_blob_off.npy"))  # Wire-Cell 3D blobs (#16)
+        self.has_txyz = os.path.exists(os.path.join(d, "hit_txyz.npy"))      # per-hit truth 3D position (#16)
 
     def ev(self, k):
         if k not in self._ev:
@@ -28,6 +32,18 @@ class Shard:
         if k not in self._hit:
             self._hit[k] = np.load(os.path.join(self.dir, f"hit_{k}.npy"), mmap_mode="r")
         return self._hit[k]
+
+    def blob(self, k):
+        key = "blob_" + k
+        if key not in self._hit:
+            self._hit[key] = np.load(os.path.join(self.dir, f"blob_{k}.npy"), mmap_mode="r")
+        return self._hit[key]
+
+    def hb(self, k):
+        key = "hb_" + k
+        if key not in self._hit:
+            self._hit[key] = np.load(os.path.join(self.dir, f"hb_{k}.npy"), mmap_mode="r")
+        return self._hit[key]
 
     def oph(self, k):
         if k not in self._oph:
@@ -102,6 +118,19 @@ class EventDataset(torch.utils.data.Dataset):
             out["oph_" + k] = np.asarray(sh.oph(k)[o0:o0 + on])
         for k in self.ev_keys:
             out["ev_" + k] = np.asarray(sh.ev(k)[j])
+        if sh.has_flash:
+            out["fl_pmt"] = np.asarray(sh.ev("fl_pmt")[j], dtype=np.float32)
+            out["fl_t"] = float(sh.ev("fl_t")[j])
+            out["fl_pe"] = float(sh.ev("fl_pe")[j])
+        if sh.has_blobs:                     # #16: blobs of this event and the hit-blob pairs (event-local indices)
+            b0, bn = int(sh.ev("blob_off")[j]), int(sh.ev("blob_cnt")[j])
+            for k in BLOB_COLS:
+                out["blob_" + k] = np.asarray(sh.blob(k)[b0:b0 + bn])
+            p0, pn = int(sh.ev("hb_off")[j]), int(sh.ev("hb_cnt")[j])
+            out["hb_hit"] = np.asarray(sh.hb("hit")[p0:p0 + pn])
+            out["hb_blob"] = np.asarray(sh.hb("blob")[p0:p0 + pn])
+        if self.truth and sh.has_txyz:
+            out["hit_txyz"] = np.asarray(sh.hit("txyz")[h0:h0 + hn])
         return out
 
 
@@ -131,6 +160,26 @@ def collate(items):
     for k in items[0]:
         if k.startswith("ev_"):
             b[k] = torch.from_numpy(np.stack([np.asarray(it[k]) for it in items]))
+    if all("fl_pmt" in it for it in items):
+        b["fl_pmt"] = torch.from_numpy(np.stack([it["fl_pmt"] for it in items]))
+        b["fl_t"] = torch.tensor([it["fl_t"] for it in items], dtype=torch.float32)
+        b["fl_pe"] = torch.tensor([it["fl_pe"] for it in items], dtype=torch.float32)
+    if all("blob_x" in it for it in items):
+        nb = [len(it["blob_x"]) for it in items]
+        b["blob_evt"] = torch.repeat_interleave(torch.arange(n), torch.tensor(nb))
+        b["blob_xyz"] = torch.from_numpy(np.stack([cat("blob_x"), cat("blob_y"), cat("blob_z")], 1).astype(np.float32))
+        b["blob_q"] = torch.from_numpy(cat("blob_q").astype(np.float32))
+        b["blob_ext"] = torch.from_numpy(cat("blob_ext").astype(np.float32).reshape(-1, 4))
+        b["blob_tpc"] = torch.from_numpy(cat("blob_tpc").astype(np.int64))
+        for k in ("trackid", "nu"):
+            if "blob_" + k in items[0]:
+                b["blob_" + k] = torch.from_numpy(cat("blob_" + k).astype(np.int64))
+        hoff = np.concatenate([[0], np.cumsum(nh)[:-1]])
+        boff = np.concatenate([[0], np.cumsum(nb)[:-1]])
+        b["hb_hit"] = torch.from_numpy(np.concatenate([it["hb_hit"].astype(np.int64) + o for it, o in zip(items, hoff)]))
+        b["hb_blob"] = torch.from_numpy(np.concatenate([it["hb_blob"].astype(np.int64) + o for it, o in zip(items, boff)]))
+    if all("hit_txyz" in it for it in items):
+        b["hit_txyz"] = torch.from_numpy(cat("hit_txyz").astype(np.float32).reshape(-1, 3))
     return b
 
 

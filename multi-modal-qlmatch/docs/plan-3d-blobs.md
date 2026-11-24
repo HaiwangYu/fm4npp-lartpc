@@ -105,3 +105,10 @@ All behind options, so the current models are unchanged.
 ## 5. Log
 
 - **2026-11-24:** plan written; request sent to `prod_aurora` and `porting_sbndbuild03`.
+- **2026-11-24:** both sessions found a cheaper route (from the Wire-Cell step-1 outputs).
+  - The labeler's blob scalars, track IDs, the track table and the 3D points already exist in the step-1 tars.
+  - Only step 2's cluster splitting is rerun, so cluster IDs match `wc_hit_table`.
+  - `prod_aurora` test job 9122698; data side ~250-400 CPU-h on FermiGrid.
+- **2026-11-24:** qlfm side implemented (options off by default; an existing SBND checkpoint still loads strictly).
+  - Components: `--charge-stem cnn`, `--pos3d`, `--light-tok flash|pmt_flash`, `--pmt-pos v2`, `--blobs`, `--aux3d-weight`; converter `convert_blobs` (0.6 tables) and `merge_shards` offsets.
+  - Smoke-tested on GPU on a 64-event fake-blob cache (`scripts/make_fake_blob_cache.py`): pretraining (all losses), the flash variant, and fine-tuning from the checkpoint and from scratch.

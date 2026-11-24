@@ -274,12 +274,85 @@ def convert(path, outdir, chunk=2000, part=0, nparts=1):
     for d in (H, O):
         for v in d.values():
             np.save(_alloc.files.pop(id(v)), v)
+    if sbnd and BLOB_H5["table"] in set(f.tables()):          # sbnd-h5maker 0.6 (#16)
+        stats.update(convert_blobs(f, outdir, ev_lo, ev_hi, n_hits, hs))
     stats.update(n_events=n, n_hits=n_hits, n_ophits=n_oph, source=os.path.abspath(path), is_data=is_data,
                  ev_lo=ev_lo, ev_hi=ev_hi,
                  seconds=time.time() - t0)
     with open(os.path.join(outdir, "meta.json"), "w") as fo:
         json.dump(stats, fo, indent=1)
     f.close()
+    return stats
+
+
+# ---------------- sbnd-h5maker 0.6: Wire-Cell 3D blobs (#16) ----------------
+# HDF5 column names (docs/plan-3d-blobs.md section 1); adjust here if the 0.6 spec names them differently
+BLOB_H5 = dict(table="wc_blob_table", cx="center_x", cy="center_y", cz="center_z", q="charge", tpc="tpc",
+               smin="slice_index_min", smax="slice_index_max", cluster="cluster_id", nu="wc_nu_index",
+               trackid="trackid", truth_q="truth_q", truth_q_dom="truth_q_dom")
+WIRE_RANGES = (("u_wire_index_min", "u_wire_index_max"), ("v_wire_index_min", "v_wire_index_max"),
+               ("w_wire_index_min", "w_wire_index_max"))
+HB_H5 = dict(table="wc_hit_blob_table", hit="hit_id", blob="blob_id")
+TRK_H5 = ("trackid", "pdg", "mother_trackid", "status", "start_x", "start_y", "start_z", "start_E",
+          "end_x", "end_y", "end_z", "start_px", "start_py", "start_pz", "nu_idx", "process")
+HTRUTH_H5 = dict(table="hit_truth_table", hit="hit_id", x="x", y="y", z="z")
+
+
+def convert_blobs(f, outdir, ev_lo, ev_hi, n_hits, hs):
+    """Blob, hit-blob, track and per-hit truth-position columns of one part. hs: part-local hit offsets."""
+    n = ev_hi - ev_lo
+    tabs = set(f.tables())
+    rd = lambda t, cols: _shift(f.read_range(t, ev_lo, ev_hi, cols), ev_lo)
+    stats = {}
+    # blobs (rows are contiguous per event, in event order)
+    cols = [BLOB_H5[k] for k in ("cx", "cy", "cz", "q", "tpc", "smin", "smax", "cluster", "nu")] + \
+        [c for pair in WIRE_RANGES for c in pair]
+    have = set(f.columns(BLOB_H5["table"]))
+    truth_cols = [BLOB_H5[k] for k in ("trackid", "truth_q", "truth_q_dom") if BLOB_H5[k] in have]
+    bl, bevt = rd(BLOB_H5["table"], cols + truth_cols)
+    nb = len(bevt)
+    bcnt = np.bincount(bevt, minlength=n)
+    tps = float(f.f.attrs.get("wc_ticks_per_slice", 4))
+    ext = np.stack([(bl[BLOB_H5["smax"]] - bl[BLOB_H5["smin"]]) * tps * G.TICK_TO_CM]
+                   + [(bl[hi] - bl[lo]) * G.WIRE_PITCH_CM for lo, hi in WIRE_RANGES], 1)
+    out = dict(blob_x=bl[BLOB_H5["cx"]].astype(np.float32), blob_y=bl[BLOB_H5["cy"]].astype(np.float32),
+               blob_z=bl[BLOB_H5["cz"]].astype(np.float32), blob_q=bl[BLOB_H5["q"]].astype(np.float32),
+               blob_ext=ext.astype(np.float32), blob_tpc=bl[BLOB_H5["tpc"]].astype(np.uint8),
+               blob_cluster=bl[BLOB_H5["cluster"]].astype(np.int32), blob_nu=bl[BLOB_H5["nu"]].astype(np.int16),
+               blob_trackid=(bl[BLOB_H5["trackid"]] if BLOB_H5["trackid"] in bl else np.full(nb, -1)).astype(np.int32))
+    if BLOB_H5["truth_q"] in bl:
+        out["blob_tq"] = bl[BLOB_H5["truth_q"]].astype(np.float32)
+        out["blob_tqdom"] = bl[BLOB_H5["truth_q_dom"]].astype(np.float32)
+    ev = dict(blob_off=np.concatenate([[0], np.cumsum(bcnt)[:-1]]).astype(np.int64), blob_cnt=bcnt.astype(np.int32))
+    # hit-blob pairs (event-local hit and blob indices)
+    hb, hbevt = rd(HB_H5["table"], [HB_H5["hit"], HB_H5["blob"]])
+    pcnt = np.bincount(hbevt, minlength=n)
+    assert (hb[HB_H5["blob"]] < bcnt[hbevt]).all(), "hit-blob pair points past the event's blobs"
+    out.update(hb_hit=hb[HB_H5["hit"]].astype(np.int32), hb_blob=hb[HB_H5["blob"]].astype(np.int32))
+    ev.update(hb_off=np.concatenate([[0], np.cumsum(pcnt)[:-1]]).astype(np.int64), hb_cnt=pcnt.astype(np.int32))
+    # per-G4-track truth (simulation)
+    if "track_table" in tabs:
+        tcols = [c for c in TRK_H5 if c in set(f.columns("track_table"))]
+        tr, trevt = rd("track_table", tcols)
+        tcnt = np.bincount(trevt, minlength=n)
+        for c in tcols:
+            out["trk_" + c] = tr[c].astype(np.float32 if c[-2:] in ("_x", "_y", "_z", "_E") or c.endswith(("px", "py", "pz"))
+                                         else np.int32)
+        ev.update(trk_off=np.concatenate([[0], np.cumsum(tcnt)[:-1]]).astype(np.int64), trk_cnt=tcnt.astype(np.int32))
+        stats["n_tracks"] = int(len(trevt))
+    # per-hit truth 3D position (simulation); NaN where none
+    if HTRUTH_H5["table"] in tabs:
+        ht, htevt = rd(HTRUTH_H5["table"], [HTRUTH_H5[k] for k in ("hit", "x", "y", "z")])
+        txyz = np.full((n_hits, 3), np.nan, np.float16)
+        row = hs[htevt] + ht[HTRUTH_H5["hit"]]
+        txyz[row] = np.stack([ht[HTRUTH_H5[k]] for k in "xyz"], 1)
+        out["hit_txyz"] = txyz
+    for k, v in out.items():
+        np.save(os.path.join(outdir, f"{k}.npy"), v)
+    for k, v in ev.items():
+        np.save(os.path.join(outdir, f"ev_{k}.npy"), v)
+    stats.update(n_blobs=int(nb), n_hit_blob=int(len(hbevt)), has_track_table="track_table" in tabs,
+                 has_hit_truth=HTRUTH_H5["table"] in tabs)
     return stats
 
 
