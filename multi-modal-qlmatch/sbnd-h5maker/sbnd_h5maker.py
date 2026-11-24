@@ -25,6 +25,14 @@ Tables (hep_hpc / ph5concat layout: one (N, k) dataset per column, `event_id` (N
   opflash_table       opflashtpc0 + opflashtpc1 (tpc column), opflashsumpe_table: per-channel PE of each flash
   wc_event_table      one row per Wire-Cell neutrino candidate (T_tagger / T_kine)
   wc_hit_table        one row per hit (same order as hit_table): Wire-Cell nu-candidate footprint labels
+
+0.6 (fm4npp #16), with --blob-dir / --blob-dump (the post-split point-cloud tree, wct/wct-blobdump.jsonnet):
+  wc_blob_table       every Wire-Cell blob (all clusters): cluster_id, tpc, slice and wire ranges, centre, charge,
+                      wc_nu_index, (sim) TensorSetLabeler trackid / truth_q / truth_q_dom / trackid2 / truth_q2
+  wc_cluster_table    every step-2 cluster: blob census + the tracking-pr.root T_cluster flags (labels only)
+  wc_hit_blob_table   hit <-> blob (many-to-many), weight = 1 / (number of blobs holding the hit)
+  track_table         (sim) one row per G4 track with deposits in the readout (labeler truthtrack) + kinematics
+  hit_truth_table     (sim, always) per hit: energy-weighted true (pre-SCE) mean position and RMS of its deposits
 """
 import argparse
 import glob
@@ -46,8 +54,13 @@ UNITS = {
     "integral": "ADC x tick", "pe, sumpe, totalpe": "photoelectrons",
     "wc reco_enu": "MeV", "wc flash_time_us": "us",
     "event_table time_s": "s, unix time of the event (EventAuxiliary)",
-    "event_table frame_*_ns": "ns, sbnd::timing::FrameShiftInfo (real data; 0 with has_frameshift 0)"}
-VERSION = "sbnd-h5maker 0.5"
+    "event_table frame_*_ns": "ns, sbnd::timing::FrameShiftInfo (real data; 0 with has_frameshift 0)",
+    "wc_blob_table center_*, track_table start/end_x/y/z, hit_truth_table true_*/app_*": "cm",
+    "wc_blob_table / wc_cluster_table charge, truth_q*, track_table q_*": "electrons",
+    "wc_blob_table slice_index_*": "TPC ticks (0.5 us), slices of 4 ticks", "wc_cluster_table cluster_t0_ns": "ns",
+    "track_table start/end_t": "ns (G4 clock)", "track_table *_px/py/pz/E": "GeV",
+    "track_table e_readout, hit_truth_table energy": "MeV"}
+VERSION = "sbnd-h5maker 0.6"
 
 
 WC_LABEL_NOTES = (
@@ -110,7 +123,7 @@ def f64(k=1):
     return (np.float64, k)
 
 
-def schema():
+def schema(blobs=False):
     T = {}
     T["event_table"] = Table("event_table", {
         "is_cc": i32(), "nu_pdg": i32(), "nu_energy": f32(), "lep_energy": f32(), "nu_dir": f32(3), "nu_vtx": f32(3),
@@ -120,7 +133,9 @@ def schema():
         # 0.5: event time + FrameShiftInfo (real data), Wire-Cell in-beam bundle census (T_bundle)
         "time_s": f64(), "has_frameshift": i32(), "timing_type": i32(), "frame_apply_at_caf_ns": f32(),
         "frame_hlt_beamgate_ns": f32(), "frame_hlt_crtt1_ns": f32(), "frame_tdc_crtt1_ns": f32(),
-        "frame_tdc_bes_ns": f32(), "frame_tdc_rwm_ns": f32(), "wc_n_bundle": i32(), "wc_n_bundle_cosmic": i32()})
+        "frame_tdc_bes_ns": f32(), "frame_tdc_rwm_ns": f32(), "wc_n_bundle": i32(), "wc_n_bundle_cosmic": i32(),
+        # 0.6: 1 = the event's blob record was found in the blob dump, 0 = not (or no --blob-dir), -1 = not asked
+        "wc_blob_status": i32(), "wc_n_blobs": i32()})
     T["nu_table"] = Table("nu_table", {
         "nu_index": i32(), "nu_pdg": i32(), "is_cc": i32(), "nu_energy": f32(), "lep_energy": f32(),
         "lep_pdg": i32(), "nu_vtx": f32(3), "nu_dir": f32(3), "nu_time_ns": f32(), "nu_mode": i32(),
@@ -132,6 +147,11 @@ def schema():
             "num_electrons": f32(), "origin": i32(), "nu_index": i32()}
     T["edep_table"] = Table("edep_table", dict(edep))
     T["edep_cosmic_table"] = Table("edep_cosmic_table", dict(edep))
+    # 0.6: one row per hit (sim; empty in data): energy-weighted mean / RMS of the true (pre-SCE) position of the
+    # deposits projected onto the hit, the mean apparent (SCE-displaced) position, and their summed energy
+    T["hit_truth_table"] = Table("hit_truth_table", {
+        "hit_id": i32(), "true_x": f32(), "true_y": f32(), "true_z": f32(), "true_rms_x": f32(), "true_rms_y": f32(),
+        "true_rms_z": f32(), "app_x": f32(), "app_y": f32(), "app_z": f32(), "energy": f32()})
     T["particle_table"] = Table("particle_table", {
         "g4_id": i32(), "g4_pdg": i32(), "parent_id": i32(), "category": i32(), "instance": i32(), "origin": i32(),
         "nu_index": i32(),
@@ -155,6 +175,28 @@ def schema():
         "cosmict_flag": f32(), "matched_flash_gid": i32()})
     T["wc_hit_table"] = Table("wc_hit_table", {
         "hit_id": i32(), "wc_cluster_id": i32(), "wc_nu_index": i32(), "wc_main": i32(), "wc_in_enu": i32()})
+    if blobs:
+        T["wc_blob_table"] = Table("wc_blob_table", {
+            "blob_id": i32(), "cluster_id": i32(), "tpc": i32(), "slice_index_min": i32(), "slice_index_max": i32(),
+            "u_wire_index_min": i32(), "u_wire_index_max": i32(), "v_wire_index_min": i32(),
+            "v_wire_index_max": i32(), "w_wire_index_min": i32(), "w_wire_index_max": i32(), "center_x": f32(),
+            "center_y": f32(), "center_z": f32(), "center_x_t0cor": f32(), "charge": f32(), "npoints": i32(),
+            "wc_nu_index": i32(), "trackid": i32(), "truth_q": f32(), "truth_q_dom": f32(), "trackid2": i32(),
+            "truth_q2": f32()})
+        T["wc_cluster_table"] = Table("wc_cluster_table", {
+            "cluster_id": i32(), "n_blobs": i32(), "charge": f32(), "npoints": i32(), "length_cm": f32(),
+            "in_scope": i32(), "flag_main_cluster": i32(), "flag_associated_cluster": i32(), "cluster_t0_ns": f32(),
+            "flag_TGM": i32(), "flag_STM": i32(), "flag_FC": i32(), "lm_flag": i32(), "beam_flash": i32(),
+            "flash_id": i32(), "matched_flash_gid": i32(), "wc_nu_index": i32(), "wc_main": i32(),
+            "wc_in_enu": i32()})
+        T["wc_hit_blob_table"] = Table("wc_hit_blob_table", {"hit_id": i32(), "blob_id": i32(), "weight": f32()})
+        T["track_table"] = Table("track_table", {
+            **{c: i32() for c in ("trackid", "pdg", "mother_trackid", "mother_pdg", "status")},
+            **{c: f32() for c in ("start_x", "start_y", "start_z", "start_t", "start_px", "start_py", "start_pz",
+                                  "start_E", "end_x", "end_y", "end_z", "end_t", "end_px", "end_py", "end_pz", "end_E")},
+            **{c: i32() for c in ("nu_idx", "process", "ancestor_trackid", "prong_trackid")},
+            **{c: f32() for c in ("q_readout", "e_readout", "q_in_blobs")}, "n_blobs": i32(), "q_blobs": f32(),
+            "n_blobs_dom": i32(), "q_dom_blobs": f32()})
     return T
 
 
@@ -203,6 +245,7 @@ class WC:
         """(status, candidate rows, footprint) ; status 1 = tracking-pr.root present, 0 = missing."""
         p = self.path(rse)
         self.census = (-1, -1)
+        self.role, self.tcl = {}, None
         if p is None:
             return 0, [], None
         f = self.uproot.open(p)
@@ -251,6 +294,9 @@ class WC:
                 assert len(ch) == len(sl) == len(cl)
                 fp = (ch, sl, cl, role)
         self.census = (-1, -1)
+        self.role = role
+        if "T_cluster" in keys and f["T_cluster"].num_entries:
+            self.tcl = f["T_cluster"].arrays(library="np")
         if "T_bundle" in keys:
             r = f["T_bundle"].arrays(["reason"], library="np")["reason"]
             self.census = (int(len(r)), int(np.sum(r == 2)))   # NuBundleCensus kAllCosmic = 2
@@ -375,6 +421,9 @@ def main():
     ap.add_argument("--detector-json", default=os.path.join(HERE, "sbnd_detector.json"))
     ap.add_argument("--data", action="store_true",
                     help="real data: read no truth product (truth tables empty, event_table truth columns at defaults)")
+    ap.add_argument("--blob-dir", default="",
+                    help="0.6: directory of <unit name>.blobs.tar.gz (the wct-blobdump.jsonnet output of each unit)")
+    ap.add_argument("--blob-dump", nargs="*", default=[], help="0.6: blob-dump tars, in addition to --blob-dir")
     ap.add_argument("--frameshift-label", default="frameshift",
                     help="art label of sbnd::timing::FrameShiftInfo ('' = do not read)")
     a = ap.parse_args()
@@ -387,6 +436,20 @@ def main():
     files, wcdirs = units_to_inputs(units)
     files += a.reco1
     wcdirs += a.wc_dir
+    dumps = list(a.blob_dump)
+    if a.blob_dir:
+        for u in units:   # <unit>.blobs.tar.gz, or one <unit>.blobs.<segment>.tar.gz per step-1 segment (PARTIAL)
+            g = sorted(glob.glob(os.path.join(a.blob_dir, os.path.basename(os.path.normpath(u)) + ".blobs*.tar.gz")))
+            dumps += g or [os.path.join(a.blob_dir, os.path.basename(os.path.normpath(u)) + ".blobs.tar.gz")]
+    blobs = None
+    if dumps:
+        import wc_blobs
+        missing = [d for d in dumps if not os.path.exists(d)]
+        if missing:
+            sys.exit("missing blob dumps: %s" % missing)
+        t0 = time.time()
+        blobs = wc_blobs.BlobDump(dumps)
+        print("blob dumps: %d files, %d events, %.0f s" % (len(dumps), len(blobs.ev), time.time() - t0), flush=True)
     if not files:
         sys.exit("no input files")
 
@@ -395,7 +458,7 @@ def main():
     print("gallery + extract.h ready in %.0f s" % (time.time() - t0), flush=True)
     det = json.load(open(a.detector_json))
     wc = WC(wcdirs, a.wc_tick_offset, a.wc_ticks_per_slice, det)
-    T = schema()
+    T = schema(blobs is not None)
     L = ROOT.sbndh5.Labels()
     L.tdc_offset = a.tdc_offset
     L.frameshift = a.frameshift_label
@@ -452,6 +515,11 @@ def main():
 
         status, cands, fp = wc.event(rse)
         stats["wc_missing"] += status == 0
+        brec = blobs.ev.get(rse) if blobs is not None else None
+        bstat = -1 if blobs is None else int(brec is not None)
+        nblob = len(brec["charge"]) if brec is not None else 0
+        if blobs is not None:
+            stats["blob_missing"] = stats.get("blob_missing", 0) + int(brec is None)
         T["event_table"].add(seq, rse, 1, is_cc=[o.is_cc], nu_pdg=[o.nu_pdg], nu_energy=[o.nu_energy],
                              lep_energy=[o.lep_energy], nu_dir=list(o.nu_dir), nu_vtx=list(o.nu_vtx),
                              nu_time_ns=[o.nu_time], lep_pdg=[o.lep_pdg], nu_mode=[o.nu_mode],
@@ -462,7 +530,8 @@ def main():
                              frame_apply_at_caf_ns=[o.fs_apply_at_caf], frame_hlt_beamgate_ns=[o.fs_hlt_beamgate],
                              frame_hlt_crtt1_ns=[o.fs_hlt_crtt1], frame_tdc_crtt1_ns=[o.fs_tdc_crtt1],
                              frame_tdc_bes_ns=[o.fs_tdc_bes], frame_tdc_rwm_ns=[o.fs_tdc_rwm],
-                             wc_n_bundle=[wc.census[0]], wc_n_bundle_cosmic=[wc.census[1]])
+                             wc_n_bundle=[wc.census[0]], wc_n_bundle_cosmic=[wc.census[1]],
+                             wc_blob_status=[bstat], wc_n_blobs=[nblob])
         nnu = o.v_index.size()
         T["nu_table"].add(seq, rse, nnu, nu_index=V(o.v_index, np.int32), nu_pdg=V(o.v_pdg, np.int32),
                           is_cc=V(o.v_cc, np.int32), nu_energy=V(o.v_energy, np.float32),
@@ -482,6 +551,12 @@ def main():
         isnu = e["origin"] == 1
         T["edep_table"].add(seq, rse, int(isnu.sum()), **{k: v[isnu] for k, v in e.items()})
         T["edep_cosmic_table"].add(seq, rse, int((~isnu).sum()), **{k: v[~isnu] for k, v in e.items()})
+        if not a.data:
+            T["hit_truth_table"].add(seq, rse, nh, hit_id=np.arange(nh),
+                                     **{c: V(getattr(o, "t_" + k), np.float32) for c, k in (
+                                         ("true_x", "x"), ("true_y", "y"), ("true_z", "z"), ("true_rms_x", "sx"),
+                                         ("true_rms_y", "sy"), ("true_rms_z", "sz"), ("app_x", "ax"), ("app_y", "ay"),
+                                         ("app_z", "az"), ("energy", "e"))})
         npart = o.p_g4.size()
         T["particle_table"].add(seq, rse, npart, g4_id=V(o.p_g4, np.int32), g4_pdg=V(o.p_pdg, np.int32),
                                 parent_id=V(o.p_parent, np.int32), category=V(o.p_cat, np.int32),
@@ -514,6 +589,26 @@ def main():
         cid, nui, mn, en = wc.hit_labels(fp, h_wcch, h_t)
         T["wc_hit_table"].add(seq, rse, nh, hit_id=np.arange(nh), wc_cluster_id=cid, wc_nu_index=nui, wc_main=mn,
                               wc_in_enu=en)
+        if brec is not None:
+            T["wc_blob_table"].add(seq, rse, nblob, **wc_blobs.blob_rows(brec, wc.role))
+            cr = wc_blobs.cluster_rows(brec, wc.tcl, wc.role)
+            T["wc_cluster_table"].add(seq, rse, len(cr["cluster_id"]), **cr)
+            hh, bb = blobs.hit_blob(brec, V(o.h_tpc, np.int32), V(o.h_plane, np.int32), V(o.h_wire, np.int32), h_t,
+                                    a.wc_tick_offset)
+            nper = np.bincount(hh, minlength=nh) if nh else np.zeros(0, np.int64)
+            T["wc_hit_blob_table"].add(seq, rse, len(hh), hit_id=hh.astype(np.int32), blob_id=bb.astype(np.int32),
+                                       weight=(1.0 / np.maximum(nper[hh], 1)).astype(np.float32))
+            stats["blobs"] = stats.get("blobs", 0) + nblob
+            stats["hit_blob_pairs"] = stats.get("hit_blob_pairs", 0) + len(hh)
+            stats["hits_in_blobs"] = stats.get("hits_in_blobs", 0) + int((nper > 0).sum())
+            if not a.data and "truthtrack" in brec:
+                ids = ROOT.std.vector("int")()
+                for t_ in brec["truthtrack"][0][:, 0].astype(np.int64).tolist():
+                    ids.push_back(int(t_))
+                kin, kst = ROOT.std.vector("float")(), ROOT.std.vector("int")()
+                ROOT.sbndh5.track_kin(ev, L, ids, kin, kst)
+                tr = wc_blobs.track_rows(brec, V(kin, np.float32), V(kst, np.int32))
+                T["track_table"].add(seq, rse, len(tr["trackid"]), **tr)
         if fp is not None and scanned < a.scan_offsets:
             scanned += 1
             for off in range(-3400, 3401, 8):
@@ -558,6 +653,12 @@ def main():
         f.attrs["wc_channel_offsets"] = json.dumps(wc.ch_off.tolist())
         f.attrs["ophit_window_us"] = a.ophit_window
         f.attrs["wc_ticks_per_slice"] = a.wc_ticks_per_slice
+        if blobs is not None:
+            f.attrs["wc_blob_notes"] = json.dumps(wc_blobs.BLOB_ATTRS)
+            f.attrs["wc_blob_dumps"] = json.dumps(dumps)
+            f.attrs["wc_blob_hit_rule"] = ("hit in blob: same tpc; slice_index_min <= floor(local_time + wc_tick_offset) "
+                                           "< slice_index_max; wire_index_min <= local_wire < wire_index_max on the "
+                                           "hit's plane; weight = 1 / blobs holding the hit")
         f.attrs["hit_truth"] = {1: "gaushitTruthMatch assns",
                                 2: "SimChannel %s backtracking, TDC = tick + %g, window PeakTime +- %g RMS"
                                    % (L.simchannel, L.tdc_offset, L.hit_time_rms),
