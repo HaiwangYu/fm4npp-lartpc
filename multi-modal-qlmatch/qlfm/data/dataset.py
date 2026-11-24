@@ -8,7 +8,8 @@ import torch
 
 HIT_FEAT = ("plane", "wire", "time", "integral", "rms")
 HIT_TRUTH = ("nu_edep", "cat", "pnd_nu")
-BLOB_COLS = ("x", "y", "z", "q", "ext", "tpc", "cluster", "nu", "trackid")   # cache blob_<col>.npy (#16)
+BLOB_COLS = ("x", "y", "z", "q", "ext", "tpc")          # cache blob_<col>.npy (#16) read for the model
+BLOB_LABEL_COLS = ("cluster", "nu", "trackid")            # read only with blob_labels=True (labels / analysis)
 OPH = ("ch", "t", "pe")
 
 
@@ -85,8 +86,9 @@ class Corpus:
 class EventDataset(torch.utils.data.Dataset):
     """Returns raw hits/ophits for one event (+ truth columns if `truth`)."""
 
-    def __init__(self, corpus: Corpus, indices, truth=False, ev_keys=(), wc_labels=False):
+    def __init__(self, corpus: Corpus, indices, truth=False, ev_keys=(), wc_labels=False, blob_labels=False):
         self.c = corpus
+        self.blob_cols = BLOB_COLS + (BLOB_LABEL_COLS if blob_labels else ())
         self.idx = np.asarray(indices, dtype=np.int64)
         self.truth = truth
         self.ev_keys = ev_keys
@@ -124,7 +126,7 @@ class EventDataset(torch.utils.data.Dataset):
             out["fl_pe"] = float(sh.ev("fl_pe")[j])
         if sh.has_blobs:                     # #16: blobs of this event and the hit-blob pairs (event-local indices)
             b0, bn = int(sh.ev("blob_off")[j]), int(sh.ev("blob_cnt")[j])
-            for k in BLOB_COLS:
+            for k in self.blob_cols:
                 out["blob_" + k] = np.asarray(sh.blob(k)[b0:b0 + bn])
             p0, pn = int(sh.ev("hb_off")[j]), int(sh.ev("hb_cnt")[j])
             out["hb_hit"] = np.asarray(sh.hb("hit")[p0:p0 + pn])
