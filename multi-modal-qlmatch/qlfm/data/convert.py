@@ -295,7 +295,9 @@ WIRE_RANGES = (("u_wire_index_min", "u_wire_index_max"), ("v_wire_index_min", "v
 HB_H5 = dict(table="wc_hit_blob_table", hit="hit_id", blob="blob_id")
 TRK_H5 = ("trackid", "pdg", "mother_trackid", "status", "start_x", "start_y", "start_z", "start_E",
           "end_x", "end_y", "end_z", "start_px", "start_py", "start_pz", "nu_idx", "process")
-HTRUTH_H5 = dict(table="hit_truth_table", hit="hit_id", x="x", y="y", z="z")
+# per-hit truth position: the SCE-displaced ("apparent") mean deposit position, the same frame as the Wire-Cell blob
+# centres (no SCE correction) and the hits, so it is what 2D -> 3D lifting can recover (P3a target)
+HTRUTH_H5 = dict(table="hit_truth_table", hit="hit_id", x="app_x", y="app_y", z="app_z")
 
 
 def convert_blobs(f, outdir, ev_lo, ev_hi, n_hits, hs):
@@ -309,9 +311,11 @@ def convert_blobs(f, outdir, ev_lo, ev_hi, n_hits, hs):
         [c for pair in WIRE_RANGES for c in pair]
     have = set(f.columns(BLOB_H5["table"]))
     truth_cols = [BLOB_H5[k] for k in ("trackid", "truth_q", "truth_q_dom") if BLOB_H5[k] in have]
-    bl, bevt = rd(BLOB_H5["table"], cols + truth_cols)
+    bl, bevt = rd(BLOB_H5["table"], cols + truth_cols + ["blob_id"])
     nb = len(bevt)
     bcnt = np.bincount(bevt, minlength=n)
+    local = np.arange(nb) - np.repeat(np.concatenate([[0], np.cumsum(bcnt)[:-1]]), bcnt)
+    assert (bl["blob_id"] == local).all(), "wc_blob_table.blob_id is not the event-local row index"
     tps = float(f.f.attrs.get("wc_ticks_per_slice", 4))
     ext = np.stack([(bl[BLOB_H5["smax"]] - bl[BLOB_H5["smin"]]) * tps * G.TICK_TO_CM]
                    + [(bl[hi] - bl[lo]) * G.WIRE_PITCH_CM for lo, hi in WIRE_RANGES], 1)

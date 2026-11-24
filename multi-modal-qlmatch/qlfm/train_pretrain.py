@@ -53,6 +53,7 @@ def get_args(argv=None):
     ap.add_argument("--blob-mask-ratio", type=float, default=0.6)
     ap.add_argument("--blob-weight", type=float, default=1.0)
     ap.add_argument("--aux3d-weight", type=float, default=0.0, help="> 0: auxiliary 3D-position head (P3a)")
+    ap.add_argument("--aux3d-dims", default="yz", choices=["yz", "xyz"], help="P3a target coordinates")
     ap.add_argument("--mask-ratio", type=float, default=0.6)
     ap.add_argument("--light-weight", type=float, default=1.0)
     ap.add_argument("--strip-frac", type=float, default=0.5)
@@ -111,7 +112,7 @@ def build(args):
         return fm, SelfDistill(fm)
     mcfg = MAECfg(mask_ratio=args.mask_ratio, light_weight=args.light_weight, strip_frac=args.strip_frac,
                   target_norm=bool(args.target_norm), blob_mask_ratio=args.blob_mask_ratio,
-                  blob_weight=args.blob_weight, aux3d_weight=args.aux3d_weight)
+                  blob_weight=args.blob_weight, aux3d_weight=args.aux3d_weight, aux3d_dims=args.aux3d_dims)
     if args.method == "jepa":
         from qlfm.models.jepa import JEPA
         return fm, JEPA(fm, mcfg, momentum=(args.jepa_ema, 1.0), target_layers=args.jepa_layers,

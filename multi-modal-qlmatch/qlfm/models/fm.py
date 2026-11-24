@@ -156,6 +156,10 @@ class MAECfg:
     blob_mask_ratio: float = 0.6
     blob_weight: float = 1.0
     aux3d_weight: float = 0.0      # > 0: predict each visible charge token's truth 3D position (P3a)
+    # coordinates in the P3a loss. "yz" (default): x of out-of-time cosmics depends on their unknown t0, which charge
+    # alone cannot give (v06 test: blob-vs-truth x residual 0.16 cm median for nu hits, 75 cm for cosmic hits);
+    # "xyz" adds x (learnable only with the light)
+    aux3d_dims: str = "yz"
 
 
 class MAE(nn.Module):
@@ -288,7 +292,8 @@ class MAE(nn.Module):
             ok = ct.tok_t3ok[vis_c]
             if ok.any():
                 tgt3 = (ct.tok_txyz[vis_c][ok] - self.pos3_min) / self.pos3_scale
-                loss_3d = F.smooth_l1_loss(self.head_3d(zc[ok]).float(), tgt3, beta=0.02)
+                dims = [1, 2] if self.cfg.aux3d_dims == "yz" else [0, 1, 2]
+                loss_3d = F.smooth_l1_loss(self.head_3d(zc[ok]).float()[:, dims], tgt3[:, dims], beta=0.02)
                 loss = loss + self.cfg.aux3d_weight * loss_3d
                 out["loss_3d"] = loss_3d.detach()
         out["loss"] = loss
