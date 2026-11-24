@@ -39,7 +39,7 @@ wct/blobdump.sh <unit dir | qlpctree.tar.gz> <dump dir> sim|data [name]
 python sbnd_h5maker.py out.h5 --units-file part.txt --blob-dir <dump dir>
 ```
 
-New tables: `wc_blob_table` (every blob of every cluster), `wc_cluster_table` (every step-2 cluster; flags from `T_cluster`, labels only), `wc_hit_blob_table` (hit ↔ blob, many-to-many), `track_table` (MC), `hit_truth_table` (MC; written with or without blobs). New `event_table` columns: `wc_blob_status`, `wc_n_blobs`. Attributes: `wc_blob_notes` (the conventions), `wc_blob_hit_rule`, `wc_blob_dumps`. Every 0.5 dataset is unchanged.
+New tables: `wc_blob_table` (every blob of every cluster), `wc_cluster_table` (every step-2 cluster; flags from `T_cluster`, labels only), `wc_hit_blob_table` (hit ↔ blob, many-to-many), `track_table` (MC), `hit_truth_table` (MC; written with or without blobs: `true_x/y/z`, `app_x/y/z`, `energy`). New `event_table` columns: `wc_blob_status`, `wc_n_blobs`. Attributes: `wc_blob_notes` (the conventions), `wc_blob_hit_rule`, `wc_blob_dumps`. Every 0.5 dataset is unchanged.
 
 Conventions:
 - **wire index**: `u/v/w_wire_index_min/max` are half-open and equal `hit_table.local_wire` (LArSoft `WireID.Wire`) in both TPCs. Not the order of the Wire-Cell wires file: it is reversed in TPC 1.

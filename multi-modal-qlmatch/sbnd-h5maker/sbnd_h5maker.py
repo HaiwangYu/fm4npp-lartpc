@@ -32,7 +32,8 @@ Tables (hep_hpc / ph5concat layout: one (N, k) dataset per column, `event_id` (N
   wc_cluster_table    every step-2 cluster: blob census + the tracking-pr.root T_cluster flags (labels only)
   wc_hit_blob_table   hit <-> blob (many-to-many), weight = 1 / (number of blobs holding the hit)
   track_table         (sim) one row per G4 track with deposits in the readout (labeler truthtrack) + kinematics
-  hit_truth_table     (sim, always) per hit: energy-weighted true (pre-SCE) mean position and RMS of its deposits
+  hit_truth_table     (sim, always) per hit: energy-weighted true (pre-SCE) and apparent (SCE-displaced) mean
+                      position of its projected deposits, and their energy
 """
 import argparse
 import glob
@@ -147,11 +148,12 @@ def schema(blobs=False):
             "num_electrons": f32(), "origin": i32(), "nu_index": i32()}
     T["edep_table"] = Table("edep_table", dict(edep))
     T["edep_cosmic_table"] = Table("edep_cosmic_table", dict(edep))
-    # 0.6: one row per hit (sim; empty in data): energy-weighted mean / RMS of the true (pre-SCE) position of the
-    # deposits projected onto the hit, the mean apparent (SCE-displaced) position, and their summed energy
+    # 0.6: one row per hit (sim; empty in data): energy-weighted mean of the true (pre-SCE) position of the deposits
+    # projected onto the hit, the mean apparent (SCE-displaced) position -- the frame of the hits and of the
+    # uncorrected blob centres, the P3a target -- and their summed energy (true_rms_* dropped on Polaris' request, #16)
     T["hit_truth_table"] = Table("hit_truth_table", {
-        "hit_id": i32(), "true_x": f32(), "true_y": f32(), "true_z": f32(), "true_rms_x": f32(), "true_rms_y": f32(),
-        "true_rms_z": f32(), "app_x": f32(), "app_y": f32(), "app_z": f32(), "energy": f32()})
+        "hit_id": i32(), "true_x": f32(), "true_y": f32(), "true_z": f32(), "app_x": f32(), "app_y": f32(),
+        "app_z": f32(), "energy": f32()})
     T["particle_table"] = Table("particle_table", {
         "g4_id": i32(), "g4_pdg": i32(), "parent_id": i32(), "category": i32(), "instance": i32(), "origin": i32(),
         "nu_index": i32(),
@@ -554,9 +556,8 @@ def main():
         if not a.data:
             T["hit_truth_table"].add(seq, rse, nh, hit_id=np.arange(nh),
                                      **{c: V(getattr(o, "t_" + k), np.float32) for c, k in (
-                                         ("true_x", "x"), ("true_y", "y"), ("true_z", "z"), ("true_rms_x", "sx"),
-                                         ("true_rms_y", "sy"), ("true_rms_z", "sz"), ("app_x", "ax"), ("app_y", "ay"),
-                                         ("app_z", "az"), ("energy", "e"))})
+                                         ("true_x", "x"), ("true_y", "y"), ("true_z", "z"), ("app_x", "ax"),
+                                         ("app_y", "ay"), ("app_z", "az"), ("energy", "e"))})
         npart = o.p_g4.size()
         T["particle_table"].add(seq, rse, npart, g4_id=V(o.p_g4, np.int32), g4_pdg=V(o.p_pdg, np.int32),
                                 parent_id=V(o.p_parent, np.int32), category=V(o.p_cat, np.int32),
