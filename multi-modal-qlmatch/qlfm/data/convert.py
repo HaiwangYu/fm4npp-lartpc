@@ -301,7 +301,8 @@ HTRUTH_H5 = dict(table="hit_truth_table", hit="hit_id", x="app_x", y="app_y", z=
 
 
 def convert_blobs(f, outdir, ev_lo, ev_hi, n_hits, hs):
-    """Blob, hit-blob, track and per-hit truth-position columns of one part. hs: part-local hit offsets."""
+    """Blob, hit-blob, track and per-hit truth-position columns of one part. hs: part-local hit offsets.
+    outdir None: return (columns, per-event columns, stats) instead of saving (scripts/add_blobs_v06.py)."""
     n = ev_hi - ev_lo
     tabs = set(f.tables())
     rd = lambda t, cols: _shift(f.read_range(t, ev_lo, ev_hi, cols), ev_lo)
@@ -351,12 +352,14 @@ def convert_blobs(f, outdir, ev_lo, ev_hi, n_hits, hs):
         row = hs[htevt] + ht[HTRUTH_H5["hit"]]
         txyz[row] = np.stack([ht[HTRUTH_H5[k]] for k in "xyz"], 1)
         out["hit_txyz"] = txyz
+    stats.update(n_blobs=int(nb), n_hit_blob=int(len(hbevt)), has_track_table="track_table" in tabs,
+                 has_hit_truth=HTRUTH_H5["table"] in tabs)
+    if outdir is None:
+        return out, ev, stats
     for k, v in out.items():
         np.save(os.path.join(outdir, f"{k}.npy"), v)
     for k, v in ev.items():
         np.save(os.path.join(outdir, f"ev_{k}.npy"), v)
-    stats.update(n_blobs=int(nb), n_hit_blob=int(len(hbevt)), has_track_table="track_table" in tabs,
-                 has_hit_truth=HTRUTH_H5["table"] in tabs)
     return stats
 
 
