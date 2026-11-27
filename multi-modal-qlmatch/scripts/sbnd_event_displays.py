@@ -12,6 +12,8 @@ PMT views: total PE per PMT in -3..21 us (beam clock) at the PMT's (z, y); TPC 0
 Usage (QLFM_DETECTOR=sbnd, on a GPU node):
   sbnd_event_displays.py OUT_DIR LABEL=RUN_DIR [LABEL=RUN_DIR ...] [--n 20] [--seed 0]
   -> OUT_DIR/{sim,on,off}_NN.png and OUT_DIR/displays.json
+  --events FILE.json: chosen events instead of random ones, {GROUP: {"kind": sim|on|off, "title": str, "gidx": [...]}}
+  (gidx into the simulation or the data corpus) -> OUT_DIR/GROUP_NN.png
 """
 import argparse
 import json
@@ -160,7 +162,7 @@ def f1(sel, ref, q):
     return float(2 * tp / max(tt + ss, 1e-9))
 
 
-def render(kind, k, g, e, preds, names, out):
+def render(kind, k, g, e, preds, names, out, note=None):
     """Landscape page (3 x 5 panels, for 16:9 slides):
     row 0  charge | truth nu hits | Wire-Cell footprint | ... after the PR cosmic tagger | event info
     row 1  hit p(nu) of models 1-3 | measured PMT light | light time profile (measured vs models)
@@ -171,6 +173,8 @@ def render(kind, k, g, e, preds, names, out):
     truth = e["nu_edep"].astype(np.float32) > HIT_NU_EDEP_MEV
     wc, wc0 = e["pnd_nu"] > 0, e["pnd_nu_ct0"] > 0
     head = {"sim": "simulation (BNB CV / νe CC / NC)", "on": "beam-on data", "off": "off-beam data"}[kind]
+    if note:
+        head = f"{head}: {note}"
     # row 0: charge and references
     ax = fig.add_subplot(gs[0, 0])
     hits(ax, e, np.log10(e["q"]), "viridis", 1.5, 3.5)
@@ -264,14 +268,23 @@ def main():
     ap.add_argument("models", nargs="+", help="LABEL=RUN_DIR")
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--events", default=None, help="JSON of chosen event groups (see the module docstring)")
     a = ap.parse_args()
     assert G.DETECTOR == "sbnd"
     os.makedirs(a.out, exist_ok=True)
     dev = torch.device("cuda")
     models = [m.split("=", 1) for m in a.models]
     names = [n for n, _ in models]
-    ev = pick_events(a.n, a.seed)
-    corp = {"sim": Corpus(SIM), "on": Corpus(DATA), "off": Corpus(DATA)}
+    if a.events:
+        spec = {k: v for k, v in json.load(open(a.events)).items() if not k.startswith("_")}   # "_meta" etc.
+        ev = {gname: np.asarray(v["gidx"], np.int64) for gname, v in spec.items()}
+        kinds = {gname: v["kind"] for gname, v in spec.items()}
+        notes = {gname: v.get("title") for gname, v in spec.items()}
+    else:
+        ev = pick_events(a.n, a.seed)
+        kinds, notes = {k: k for k in ev}, {k: None for k in ev}
+    cs = {"sim": Corpus(SIM), "data": Corpus(DATA)}
+    corp = {gname: cs["sim" if kinds[gname] == "sim" else "data"] for gname in ev}
     allp = {kind: {} for kind in ev}
     for n, run in models:
         for kind, idx in ev.items():
@@ -284,8 +297,8 @@ def main():
             e = load_event(corp[kind], int(g))
             summary[f"{kind}_{k:02d}"] = dict(gidx=int(g), run=int(e["run"]), subrun=int(e["subrun"]),
                                              event=int(e["event"]),
-                                             models=render(kind, k, int(g), e, allp[kind][int(g)], names,
-                                                           os.path.join(a.out, f"{kind}_{k:02d}.png")))
+                                             models=render(kinds[kind], k, int(g), e, allp[kind][int(g)], names,
+                                                           os.path.join(a.out, f"{kind}_{k:02d}.png"), notes[kind]))
         print("rendered", kind, flush=True)
     json.dump(dict(models=dict(models), seed=a.seed, events={k: v.tolist() for k, v in ev.items()}, pages=summary),
               open(os.path.join(a.out, "displays.json"), "w"), indent=1)
