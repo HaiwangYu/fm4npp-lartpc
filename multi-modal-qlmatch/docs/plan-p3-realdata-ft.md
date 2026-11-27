@@ -1,6 +1,6 @@
 # Plan: P3 fine-tuned on real SBND data with Wire-Cell labels (#16, step 3 of the 25 Nov next steps)
 
-Status: plan, not started (2026-11-27). Related: #14 (real data, E7), #16 (P3), `status-2026-11-25.pdf`.
+Status: **done 2026-11-27** (results in section 8). Related: #14 (real data, E7), #16 (P3), `status-2026-11-25.pdf` (slide 15).
 
 ## 1. Why
 
@@ -77,3 +77,32 @@ If R2 meets all three, it is a candidate default for the paper's real-data resul
 - **Circularity:** on data, WC is the label and the reference. Only simulation truth and off-beam are independent of it.
 - **The label inherits WC's choices:** `wc_sbnd` includes candidates the cosmic tagger flags; `wc0_sbnd` drops genuine neutrinos the tagger removes.
 - **Trigger difference:** the data are light-triggered and the simulation is not, so event-level rates are not exposure-normalised.
+
+## 8. Results (2026-11-27)
+
+Training: job 7892241, `debug-scaling`, 7 runs about 35 min. Evaluation: 91 runs, no failures. Outputs:
+- runs: `LArTPC_FM/yuhw/fm4npp-lartpc-work/p3/wcft/{R1,R2,R3}/f1_s*`;
+- reports: `.../sbnd_data/eval_p3wc/report_all.jsonl`.
+
+All data columns use the held-out files. Simulation uses the truth test set.
+
+| arm | sim T1 F1, nominal / data-like widths | WC ν charge tagged | model charge in WC | beam-on selected (off-beam at WC's 6.0%) | off-beam charge called ν |
+|---|---|---|---|---|---|
+| **R1** P3 + width, `wc_sbnd` (3 seeds) | 0.875–0.890 / **0.948–0.950** | **0.831–0.833** | 0.949–0.951 | **51.3–52.1%** | **0.06–0.08%** |
+| **R2** P3 + width, `wc0_sbnd` (3 seeds) | 0.854–0.858 / 0.941–0.943 | 0.799–0.803 | 0.954–0.956 | 52.4–53.2% | 0.04% |
+| **R3** P3, `wc0_sbnd` (1 seed) | 0.831 / 0.940 | 0.796 | 0.957 | 53.5% | 0.04% |
+| P3 + width (start point) | 0.872–0.896 / 0.965 | 0.813–0.826 | 0.889–0.899 | 41.4–41.6% | 1.9–3.0% |
+| Wire-Cell | 0.93 | – | – | 44.8% | 0.44% |
+
+**Success bars (section 5): all met by every arm.**
+- **Off-beam ν charge:** 0.04–0.08%, below WC's 0.44%. Event gating no longer changes it: the hit head itself stopped tagging in-time cosmics.
+- **Beam-on excess:** about 45–47 points at WC's off-beam rate (WC 39).
+- **Simulation T1 at data-like widths:** 0.940–0.950. The loss is 0.015–0.025, far less than E7's 0.06.
+
+**Reading**
+- **R1 is the best overall.** Cosmic-tagged labels (R2) do not help further on any independent metric.
+- **R3 ≈ R2:** once real data is used, the separate width fine-tune adds little.
+- **R4 (mixed fine-tune) is not needed.**
+- **Circularity:** WC agreement and event selection are trained toward WC. Simulation truth and off-beam charge are the independent checks.
+
+Event displays of R1 / R2 / P3 + width on the same 40 events: `p3/displays_wcft` (job 7892558).

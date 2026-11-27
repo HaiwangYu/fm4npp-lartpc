@@ -50,10 +50,11 @@
     \item \textbf{Simulation}: P3 \good{beats Wire-Cell on hit tagging} (T1 F1 0.965 vs 0.931; previous best 0.921) and improves T2--T5.
     \item \textbf{Real data}: at WC's off-beam rate P3 selects \good{39--40\%} of beam-on events (previous best 31--33\%, WC 44.8\%);
       hit-level agreement with WC barely moves (0.50--0.60). P3 is \bad{more width-sensitive}: the data/sim width mismatch is still the main limit.
-    \item \textbf{P3 + data-like-width fine-tune} (added 27 Nov): hit agreement with WC on data rises to \good{0.81--0.83}, the best
-      simulation-trained result so far (above the WC-label real-data fine-tune, 0.75). Trade-off: T1 on nominal-width simulation falls to 0.87--0.90.
-    \item \textbf{Event displays} (27 Nov): the hit head tags flash-coincident cosmic charge in events its event head rejects; gating hits by the event decision cuts off-beam $\nu$ charge to 0.3\% (WC 0.44\%).
-    \item \textbf{Next}: P3 real-data fine-tune with WC labels (running), then a width-robust pretraining and the ablations.
+    \item \textbf{P3 + data-like-width fine-tune} (added 27 Nov): hit agreement with WC on data \good{0.81--0.83}, the best simulation-trained
+      result; but it tags flash-coincident cosmic charge (off-beam $\nu$ charge 1.9--3.0\%, event displays).
+    \item \textbf{P3 + real-data fine-tune with WC labels} (27 Nov): off-beam $\nu$ charge 0.06--0.08\%, beam-on excess $\approx$46 points
+      (WC 39), simulation T1 at data-like widths 0.95. Best model on data so far.
+    \item \textbf{Next}: a width-robust pretraining and the ablations.
   \end{itemize}
 \end{frame}
 
@@ -350,6 +351,31 @@
   {\tiny ``Inside WC footprint'' here counts all beam-on events (the 25 Nov table counted events with a WC candidate).}
 \end{frame}
 
+\begin{frame}{P3 fine-tuned on real data with Wire-Cell labels (added 27 Nov)}
+  \scriptsize
+  \centering
+  E7 recipe: from the simulation fine-tune, 3,000 steps on 103k real events (beam-on + off-beam, 75\% of files); T1 = WC footprint, T2 = has a WC hit, T5 = light.
+  Plan: \code{docs/plan-p3-realdata-ft.md}. Held-out 20\% of files; simulation = truth test.\\[3pt]
+  \fitw{\begin{tabular}{lccccc}
+    \toprule
+    & sim T1, nominal / data-like widths & data: WC $\nu$ charge tagged & data: model charge in WC & beam-on selected & off-beam charge called $\nu$ \\
+    \midrule
+    \textbf{R1}: P3 + width, all WC candidates (3 seeds) & 0.875--0.890 / \good{0.948--0.950} & \good{0.831--0.833} & 0.949--0.951 & \good{51.3--52.1\%} & \good{0.06--0.08\%} \\
+    \textbf{R2}: P3 + width, cosmic-tagged WC (3 seeds) & 0.854--0.858 / 0.941--0.943 & 0.799--0.803 & 0.954--0.956 & 52.4--53.2\% & 0.04\% \\
+    \textbf{R3}: P3, cosmic-tagged WC (1 seed) & 0.831 / 0.940 & 0.796 & 0.957 & 53.5\% & 0.04\% \\
+    P3 + width (before) & 0.87--0.90 / 0.965 & 0.81--0.83 & 0.89--0.90 & 41.4--41.6\% & 1.9--3.0\% \\
+    Wire-Cell & 0.93 & -- & -- & 44.8\% & 0.44\% \\
+    \bottomrule
+  \end{tabular}}\\[4pt]
+  \raggedright\footnotesize
+  \begin{itemize}\setlength{\itemsep}{2pt}
+    \item \textbf{All three success bars met:} off-beam $\nu$ charge 0.04--0.08\% (below WC's 0.44\%; gating no longer changes it, the hit head itself learned it);
+      beam-on excess $\approx$45--47 points at WC's off-beam rate (WC 39); simulation T1 at data-like widths 0.940--0.950 ($\ge$0.93; lost 0.015--0.025).
+    \item \textbf{R1 is the best overall}; cosmic-tagged labels (R2) do not help further. R3 $\approx$ R2: once real data is used, the separate width fine-tune adds little.
+    \item \textbf{Circularity:} WC agreement and event selection are trained toward WC; the independent checks are simulation truth and off-beam charge.
+  \end{itemize}
+\end{frame}
+
 \begin{frame}{Reading}
   \footnotesize
   \begin{enumerate}\setlength{\itemsep}{6pt}
@@ -362,6 +388,8 @@
       data/simulation width mismatch remains the main data-side limit; E6 showed that training with data-like widths fixes much of it.
     \item \textbf{Combining both works (27 Nov).} P3 fine-tuned with data-like widths reaches 0.81--0.83 hit agreement with WC on data and a
       35.5-point beam-on excess: the best simulation-trained model on data, at the cost of nominal-width simulation T1 (0.87--0.90).
+    \item \textbf{A short real-data fine-tune with WC labels finishes the job (27 Nov).} It removes the off-beam $\nu$ charge (0.06--0.08\%),
+      raises the beam-on excess to $\approx$46 points and keeps simulation T1 at 0.95 (data-like widths).
   \end{enumerate}
   \vspace{4pt}
   \textbf{Caveats}
@@ -384,7 +412,7 @@
     \midrule
     1 & \textbf{P3 fine-tune with data-like widths} (\code{--width sbnd}, 3 seeds) --- \good{done 25 Nov} & yes: data hit agreement 0.81--0.83 (previous slide) & $\approx$3 node-h used \\
     2 & \textbf{P3 pretraining with randomised / data-like widths} & a width-robust backbone instead of a fine-tune fix & $\approx$3.5 node-h + fine-tunes \\
-    3 & \textbf{P3 + short real-data fine-tune with WC labels} (as E7; \code{docs/plan-p3-realdata-ft.md}) --- \textbf{running} & how far real data closes the remaining gap; does it unlearn in-time cosmics & $\approx$1.5 node-h \\
+    3 & \textbf{P3 + short real-data fine-tune with WC labels} (\code{docs/plan-p3-realdata-ft.md}) --- \good{done 27 Nov} & yes: off-beam $\nu$ charge 0.06\%, beam-on excess 46 pts, sim T1 0.95 & $\approx$1.5 node-h used \\
     4 & \textbf{Ablations} (former P0--P2): drop the CNN stem, the blob tokens, \code{pos3d}, the 3D head one at a time; CL vs C+XF & which part of P3 gives the gain & $\approx$3.5 node-h each \\
     5 & \textbf{Second simulation/data difference}: low-charge hits / noise and light timing (C+XF drops without width sensitivity) & what else separates data from simulation & $<$1 node-h (test-time) \\
     6 & \textbf{OpFlash light tokens and learned per-cluster Q/L matching} & does explicit flash matching help cosmic rejection & $\approx$4 node-h \\
@@ -393,7 +421,7 @@
     \bottomrule
   \end{tabular}\\[6pt]
   \raggedright\footnotesize
-  \textbf{Suggested order} (updated 27 Nov): 3 is running; then 2 (one width-robust model instead of a fine-tune fix) and 4 (ablations, on top of P3 + width) for the paper. Report data results with the event gating (previous slides).
+  \textbf{Suggested order} (updated 27 Nov): 2 (one width-robust model instead of a fine-tune fix) and 4 (ablations) for the paper; use R1 (P3 + width + real-data WC fine-tune) as the reference model on data.
 \end{frame}
 
 %=====================================================================
