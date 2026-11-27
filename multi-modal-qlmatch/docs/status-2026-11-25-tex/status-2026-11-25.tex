@@ -40,7 +40,7 @@
 %=====================================================================
 \begin{frame}{Summary}
   \footnotesize
-  \begin{itemize}\setlength{\itemsep}{4pt}
+  \begin{itemize}\setlength{\itemsep}{2pt}
     \item \textbf{SBND real data} (\iss{14}): 90k beam-on + 50k off-beam light-triggered events with Wire-Cell (WC) labels. Simulation-trained qlfm
       agrees with WC at $\approx$0.9 on simulation but only \bad{0.5--0.65} on data. Hit width is one cause (V $-$3\%, Y $-$4.5\% in data).
     \item \textbf{3D Wire-Cell blobs in the data} (\iss{16}): \code{sbnd-h5maker} 0.6 adds every WC blob, the hit--blob association, a G4 track table
@@ -52,7 +52,8 @@
       hit-level agreement with WC barely moves (0.50--0.60). P3 is \bad{more width-sensitive}: the data/sim width mismatch is still the main limit.
     \item \textbf{P3 + data-like-width fine-tune} (added 27 Nov): hit agreement with WC on data rises to \good{0.81--0.83}, the best
       simulation-trained result so far (above the WC-label real-data fine-tune, 0.75). Trade-off: T1 on nominal-width simulation falls to 0.87--0.90.
-    \item \textbf{Next}: event displays of P3 + width (running), then a width-robust pretraining and the tokenizer/3D ablations.
+    \item \textbf{Event displays} (27 Nov): the hit head tags flash-coincident cosmic charge in events its event head rejects; gating hits by the event decision cuts off-beam $\nu$ charge to 0.3\% (WC 0.44\%).
+    \item \textbf{Next}: P3 real-data fine-tune with WC labels (running), then a width-robust pretraining and the ablations.
   \end{itemize}
 \end{frame}
 
@@ -313,6 +314,42 @@
   \end{itemize}
 \end{frame}
 
+\begin{frame}{Event displays of P3 + width: what it calls $\nu$ that Wire-Cell does not (added 27 Nov)}
+  \centering
+  \includegraphics[width=0.495\linewidth]{figs/disp_off_nu.png}\hfill
+  \includegraphics[width=0.495\linewidth]{figs/disp_on_extra.png}\\[3pt]
+  \raggedright\scriptsize
+  \textbf{Left:} off-beam, bright cosmic flash at 1.8\,$\mu$s in the beam window: P3 + width tags segments of the cosmic tracks as $\nu$ (red), its event score is 0.
+  \textbf{Right:} beam-on, flash in TPC 1 at 0.7\,$\mu$s, no WC candidate: it tags the long through-going tracks in TPC 1 as $\nu$, event score 0.\\[2pt]
+  \textbf{Pattern in the 40 pages} (held-out files; 4 groups $\times$ 10, drawn from the top 200 of each disagreement measure; \code{p3/displays\_w}):
+  the hit head tags charge coincident with the beam-window flash even when the event head rejects the event (1--5k hits at event p($\nu$) $\approx$ 0).
+  The data are light-triggered, so nearly every event has an in-time flash, often from a cosmic; in simulation an in-time flash usually means a $\nu$.
+  Model-only selections (5.9\% of beam-on) include compact short-track events that may be $\nu$s WC missed; missed-WC events are mostly disagreements on which object is the $\nu$.
+\end{frame}
+
+\begin{frame}{A cheap fix: gate hit tagging by the event decision (added 27 Nov)}
+  \footnotesize
+  \centering
+  Tag hits as $\nu$ only in events the model selects at WC's off-beam rate; held-out data files, no retraining\\[3pt]
+  \fitw{\begin{tabular}{lccc}
+    \toprule
+    & off-beam charge called $\nu$ & WC $\nu$ charge tagged (beam-on) & model $\nu$ charge inside WC footprint (all beam-on) \\
+    \midrule
+    P3 + width, ungated (3 seeds) & 1.9--3.0\% & 0.81--0.83 & 0.58--0.62 \\
+    \textbf{P3 + width, gated} & \good{0.28--0.36\%} & 0.75--0.76 & \good{0.85--0.86} \\
+    P3, gated & 0.24\% & 0.47 & 0.80 \\
+    M CL width (E6), gated & 0.23\% & 0.60 & 0.83 \\
+    Wire-Cell & 0.44\% & -- & -- \\
+    \bottomrule
+  \end{tabular}}\\[4pt]
+  \raggedright
+  \begin{itemize}\setlength{\itemsep}{2pt}
+    \item \textbf{Gating removes the off-beam caveat:} off-beam $\nu$ charge falls below WC's, and the tagged charge is much more contained in WC's footprint, for $-$0.06 in WC charge tagged.
+    \item It is a decision rule, not a fix of the hit head: the head still reacts to in-time cosmic charge. A real-data fine-tune with off-beam events in the training set (R1/R2, running) should teach that directly.
+  \end{itemize}
+  {\tiny ``Inside WC footprint'' here counts all beam-on events (the 25 Nov table counted events with a WC candidate).}
+\end{frame}
+
 \begin{frame}{Reading}
   \footnotesize
   \begin{enumerate}\setlength{\itemsep}{6pt}
@@ -347,16 +384,16 @@
     \midrule
     1 & \textbf{P3 fine-tune with data-like widths} (\code{--width sbnd}, 3 seeds) --- \good{done 25 Nov} & yes: data hit agreement 0.81--0.83 (previous slide) & $\approx$3 node-h used \\
     2 & \textbf{P3 pretraining with randomised / data-like widths} & a width-robust backbone instead of a fine-tune fix & $\approx$3.5 node-h + fine-tunes \\
-    3 & \textbf{P3 + short real-data fine-tune with WC labels} (as E7) & how far real data closes the remaining gap & $\approx$1 node-h \\
+    3 & \textbf{P3 + short real-data fine-tune with WC labels} (as E7; \code{docs/plan-p3-realdata-ft.md}) --- \textbf{running} & how far real data closes the remaining gap; does it unlearn in-time cosmics & $\approx$1.5 node-h \\
     4 & \textbf{Ablations} (former P0--P2): drop the CNN stem, the blob tokens, \code{pos3d}, the 3D head one at a time; CL vs C+XF & which part of P3 gives the gain & $\approx$3.5 node-h each \\
     5 & \textbf{Second simulation/data difference}: low-charge hits / noise and light timing (C+XF drops without width sensitivity) & what else separates data from simulation & $<$1 node-h (test-time) \\
     6 & \textbf{OpFlash light tokens and learned per-cluster Q/L matching} & does explicit flash matching help cosmic rejection & $\approx$4 node-h \\
     7 & \textbf{MicroBooNE 3D}: WC blobs from the round-1 \code{TC} trees & P3 on MicroBooNE open/real data & production work first \\
-    8 & \textbf{Event displays of P3 + width} on beam-on / off-beam events where it and WC disagree --- \textbf{running} & what the extra selections and the off-beam $\nu$ charge are & $<$0.1 node-h \\
+    8 & \textbf{Event displays of P3 + width} where it and WC disagree --- \good{done 27 Nov} & flash-coincident cosmic charge; gating by the event decision fixes the off-beam caveat & $<$0.1 node-h used \\
     \bottomrule
   \end{tabular}\\[6pt]
   \raggedright\footnotesize
-  \textbf{Suggested order} (updated 27 Nov): 8 now (the off-beam caveat of 1); then 2 (one width-robust model instead of a fine-tune fix) and 4 (ablations, on top of P3 + width) for the paper; 3 if 2 falls short.
+  \textbf{Suggested order} (updated 27 Nov): 3 is running; then 2 (one width-robust model instead of a fine-tune fix) and 4 (ablations, on top of P3 + width) for the paper. Report data results with the event gating (previous slides).
 \end{frame}
 
 %=====================================================================
