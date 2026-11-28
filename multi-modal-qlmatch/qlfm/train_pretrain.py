@@ -69,10 +69,13 @@ def get_args(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     # reference methods (round 2)
     ap.add_argument("--method", default="mae", choices=["mae", "fm4npp", "fm4npp_l", "sd", "jepa"])
-    ap.add_argument("--width", default="native", choices=["native", "meas", "meas3d", "const"],
+    ap.add_argument("--width", default="native", choices=["native", "meas", "meas3d", "const", "sbnd", "sbnd_rand"],
                     help="hit-width domain for pretraining (#13): meas/meas3d = simulated nu hits rescaled to data "
                          "(qlfm.eval_perturb, the data-like domain D). The per-hit nu deposit is loaded only to pick "
-                         "the simulated hits; it is never a target.")
+                         "the simulated hits; it is never a target. sbnd = every SBND hit x F_SBND; sbnd_rand = "
+                         "width-robust (#16): per-event random factor between and around nominal and data-like widths "
+                         "(eval_perturb.random_width_sbnd, lambda range --width-lam).")
+    ap.add_argument("--width-lam", default="-0.5,1.5", help="sbnd_rand lambda range lo,hi (0 = nominal, 1 = data-like)")
     ap.add_argument("--lr-abs", type=float, default=None, help="absolute lr (no batch scaling)")
     ap.add_argument("--clip", type=float, default=1.0)
     ap.add_argument("--max-hits", type=int, default=16384)
@@ -139,15 +142,18 @@ def lr_at(step, args, base):
 
 
 @torch.no_grad()
-def domain(b, width):
-    """Apply the hit-width domain (#13) to a device batch; native = unchanged."""
+def domain(b, width, lam=(-0.5, 1.5)):
+    """Apply the hit-width domain (#13) to a device batch; native = unchanged; sbnd_rand = random per event (#16)."""
     if width == "native":
         return b
+    if width == "sbnd_rand":
+        from qlfm.eval_perturb import random_width_sbnd
+        return random_width_sbnd(b, lam)
     from qlfm.eval_perturb import perturb
     return perturb(b, "w_" + width, 0.0)
 
 
-def validate(mae, loader, dev, n_batches, width="native"):
+def validate(mae, loader, dev, n_batches, width="native", lam=(-0.5, 1.5)):
     mae.eval()
     state = torch.cuda.get_rng_state()
     torch.cuda.manual_seed(1234)                      # identical masks every validation
@@ -156,7 +162,7 @@ def validate(mae, loader, dev, n_batches, width="native"):
         if i >= n_batches:
             break
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            out = mae(domain(to_device(b, dev), width))
+            out = mae(domain(to_device(b, dev), width, lam))
         for key, v in out.items():
             if key.startswith("loss"):
                 acc[key] = acc.get(key, 0.0) + float(v)
@@ -227,6 +233,7 @@ def main(argv=None):
 
     # hit_nu_edep picks the simulated hits to transform; the aux 3D head (#16) needs the per-hit truth position
     truth = args.width != "native" or args.aux3d_weight > 0
+    width_lam = tuple(float(x) for x in args.width_lam.split(","))
     ds = EventDataset(corpus, train_idx, truth=truth)
     loader = torch.utils.data.DataLoader(
         ds, batch_size=args.bs, sampler=InfiniteSampler(len(ds), args.seed * 1000 + rank * 7 + step),
@@ -267,7 +274,7 @@ def main(argv=None):
     model.train()
     it = iter(loader)
     while step < args.steps:
-        b = domain(to_device(next(it), dev), args.width)
+        b = domain(to_device(next(it), dev), args.width, width_lam)
         for g in opt.param_groups:
             g["lr"] = lr_at(step, args, base_lr)
         if args.budget_h and steps_final is None:
@@ -310,7 +317,7 @@ def main(argv=None):
                 os.utime(lock)                         # heartbeat for the single-writer lock
             t_log, ev_log, acc, acc_n = time.time(), 0, {}, {}
         if step % args.val_every == 0 or step == args.steps:
-            v = validate(mae, vloader, dev, n_val_batches, args.width)
+            v = validate(mae, vloader, dev, n_val_batches, args.width, width_lam)
             if dist.is_main():
                 rec = {"step": step, **{"val_" + k: x for k, x in v.items()}}
                 print(json.dumps(rec), flush=True)

@@ -52,6 +52,20 @@ D_DATA, D_SIM, S0_US2 = 3.74e-6, 6.40e-6, 1.9                    # cm2/us, cm2/u
 WIDTH_CONST = 4.0                                                # ticks, about the median hit rms
 # SBND (#14, E3 first look): median hit RMS beam-on data / BNB CV simulation per plane U, V, Y, flat in drift
 F_SBND = {0: 1.007, 1: 0.970, 2: 0.956}
+SBND_RAND_LAM = (-0.5, 1.5)    # width-robust training (#16): lambda range, 0 = nominal simulation, 1 = data-like (F_SBND)
+
+
+def random_width_sbnd(b, lam=SBND_RAND_LAM):
+    """Width-robust training (#16): every hit's width x (1 + lambda (F_SBND[plane] - 1)), one lambda ~ U(lam) per event
+    (same lambda on all planes). Uses the batch device's RNG, so it is reproducible under a fixed CUDA seed."""
+    b = dict(b)
+    dev = b["hit_rms"].device
+    lo, hi = lam
+    l = torch.rand(b["n_events"], device=dev) * (hi - lo) + lo
+    fp = torch.tensor([F_SBND[0], F_SBND[1], F_SBND[2]], device=dev, dtype=b["hit_rms"].dtype)
+    f = 1 + l[b["hit_evt"]].to(fp.dtype) * (fp[b["hit_plane"].long()] - 1)
+    b["hit_rms"] = b["hit_rms"] * f
+    return b
 
 VARIANTS = {"nominal": (None, 0.0), "w_meas": ("meas", 0.0), "w_meas3d": ("meas3d", 0.0), "w_diff": ("diff", 0.0),
             "q-5": (None, -0.05), "q-2": (None, -0.02), "q+2": (None, 0.02), "q+5": (None, 0.05),

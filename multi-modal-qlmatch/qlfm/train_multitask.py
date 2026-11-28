@@ -45,10 +45,12 @@ def get_args(argv=None):
     ap.add_argument("--late-light", type=int, default=0, help="as train_downstream (2 = strong late fusion)")
     ap.add_argument("--hit-feat", default="native", choices=["native", "raw", "none"])
     ap.add_argument("--pimm-prep", default="matched", choices=["matched", "legacy"])
-    ap.add_argument("--width", default="native", choices=["native", "meas", "meas3d", "const", "sbnd"],
+    ap.add_argument("--width", default="native", choices=["native", "meas", "meas3d", "const", "sbnd", "sbnd_rand"],
                     help="hit widths in training and evaluation (#9): meas = simulated nu hits rescaled to data "
                          "(qlfm.eval_perturb w_meas; meas3d = Sunny's 3D factors), const = every hit the same width "
-                         "(no width information), sbnd = every SBND hit rescaled per plane to data (#14, F_SBND)")
+                         "(no width information), sbnd = every SBND hit rescaled per plane to data (#14, F_SBND), "
+                         "sbnd_rand = width-robust (#16): random per-event factor in training only "
+                         "(eval_perturb.random_width_sbnd); validation and test see unmodified widths")
     ap.add_argument("--labels", default="truth", choices=["truth", "wc", "wc_sbnd", "wc0_sbnd"],
                     help="wc (#10, D5): train/test on Wire-Cell labels of a corpus with WC columns (real data): "
                          "T1 = hit in WC's in-time main cluster of a WC generic-nu event, T2 = WC generic nu; "
@@ -140,7 +142,11 @@ class MultiTaskModel(nn.Module):
             return self.backbone(b)
 
     def forward(self, b):
-        if getattr(self, "width", "native") != "native":
+        if getattr(self, "width", "native") == "sbnd_rand":
+            if self.training:                       # #16: randomised widths in training; evaluation stays nominal
+                from qlfm.eval_perturb import random_width_sbnd
+                b = random_width_sbnd(b)
+        elif getattr(self, "width", "native") != "native":
             from qlfm.eval_perturb import perturb
             b = perturb(b, "w_" + self.width, 0.0)
         out = {}
